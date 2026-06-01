@@ -14,7 +14,7 @@ namespace SNESassetsWPF.Enums
     /// </summary>
     public enum FileType
     {
-    None,
+        None,
 
         Col,
         ColBackup,

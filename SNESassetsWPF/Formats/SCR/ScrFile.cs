@@ -10,20 +10,23 @@ namespace SNESassetsWPF.Formats
     public class ScrFile
     {
         /// <summary>
-        /// Width of the full tilemap in tiles (always 64 for S‑CG‑CAD SCR).
+        /// The raw SCR file bytes.
+        /// Needed so we can re-parse when endian mode changes.
+        /// </summary>
+        public byte[] RawBytes { get; }
+
+        /// <summary>
+        /// Width of the full tilemap in tiles.
         /// </summary>
         public int WidthTiles { get; }
 
         /// <summary>
-        /// Height of the full tilemap in tiles (always 64 for S‑CG‑CAD SCR).
+        /// Height of the full tilemap in tiles.
         /// </summary>
         public int HeightTiles { get; }
 
         /// <summary>
         /// The four 32×32 blocks that make up the SCR file.
-        /// Block order is always:
-        /// 0 = top-left, 1 = top-right,
-        /// 2 = bottom-left, 3 = bottom-right.
         /// </summary>
         public ScrBlock[] Blocks { get; }
 
@@ -37,8 +40,9 @@ namespace SNESassetsWPF.Formats
         /// Creates a new SCR file container with fixed dimensions.
         /// The parser is responsible for populating Blocks and Tiles.
         /// </summary>
-        public ScrFile(int widthTiles , int heightTiles)
+        public ScrFile(byte[] rawBytes , int widthTiles , int heightTiles)
         {
+            RawBytes = rawBytes;
             WidthTiles = widthTiles;
             HeightTiles = heightTiles;
 

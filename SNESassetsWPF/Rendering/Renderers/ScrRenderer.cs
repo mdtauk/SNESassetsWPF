@@ -1,26 +1,20 @@
 ﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
-using System;
 using System.Windows.Media;
 
 namespace SNESassetsWPF.Rendering
 {
     public class ScrRenderer
     {
-        private const int TileWidth    = 8;
-        private const int TileHeight   = 8;
-        private const int ColorsPerRow = 16;
-
         private readonly ScrFile _scr;
         private readonly CgxFile _cgx;
         private readonly ColFile _col;
         private readonly bool _showGrid;
 
-        public ScrRenderer(
-            ScrFile scr ,
-            CgxFile cgx ,
-            ColFile col ,
-            bool showGrid)
+        private const int TileWidth  = 8;
+        private const int TileHeight = 8;
+
+        public ScrRenderer(ScrFile scr , CgxFile cgx , ColFile col , bool showGrid)
         {
             _scr = scr;
             _cgx = cgx;
@@ -35,105 +29,65 @@ namespace SNESassetsWPF.Rendering
 
             int spacing = (_showGrid && zoom >= 2) ? 1 : 0;
 
-            int tilesWide  = _scr.WidthTiles;
-            int tilesHigh  = _scr.HeightTiles;
+            int widthTiles  = _scr.WidthTiles;
+            int heightTiles = _scr.HeightTiles;
 
-            int baseWidth  = tilesWide  * TileWidth;
-            int baseHeight = tilesHigh * TileHeight;
+            int baseWidth  = widthTiles  * TileWidth;
+            int baseHeight = heightTiles * TileHeight;
 
-            int width  = (baseWidth  * zoom) + ((tilesWide  - 1) * spacing);
-            int height = (baseHeight * zoom) + ((tilesHigh - 1) * spacing);
+            int width  = (baseWidth  * zoom) + ((widthTiles  - 1) * spacing);
+            int height = (baseHeight * zoom) + ((heightTiles - 1) * spacing);
 
             var buffer = new byte[width * height * 4];
 
-            for ( int ty = 0 ; ty < tilesHigh ; ty++ )
+            // Draw tiles
+            for ( int ty = 0 ; ty < heightTiles ; ty++ )
             {
-                for ( int tx = 0 ; tx < tilesWide ; tx++ )
+                for ( int tx = 0 ; tx < widthTiles ; tx++ )
                 {
-                    ScrTile entry = _scr.Tiles[ty, tx];
+                    var scrTile = _scr.Tiles[ty, tx];
 
-                    int tileIndex = entry.TileIndex;
-                    if ( tileIndex < 0 || tileIndex >= _cgx.TileCount )
+                    if ( scrTile.TileIndex < 0 || scrTile.TileIndex >= _cgx.Tiles.Length )
                         continue;
 
-                    CgxTile cgxTile = _cgx.Tiles[tileIndex];
-                    byte[,] pixels  = cgxTile.Pixels;
+                    var cgxTile = _cgx.GetTile(scrTile.TileIndex);
 
-                    // S‑CG‑CAD: palette comes from CGX tile prefix, not SCR
-                    int paletteGroup = cgxTile.PaletteGroup;
-
-                    bool hFlip = entry.HFlip;
-                    bool vFlip = entry.VFlip;
-
-                    int tileOriginX = (tx * TileWidth  * zoom) + (tx * spacing);
-                    int tileOriginY = (ty * TileHeight * zoom) + (ty * spacing);
-
-                    for ( int y = 0 ; y < TileHeight ; y++ )
-                    {
-                        int srcY = vFlip ? (TileHeight - 1 - y) : y;
-
-                        for ( int x = 0 ; x < TileWidth ; x++ )
-                        {
-                            int srcX = hFlip ? (TileWidth - 1 - x) : x;
-
-                            byte baseIndex = pixels[srcY, srcX];
-
-                            int paletteIndex = ComputePaletteIndex(
-                                _cgx.BitDepth,
-                                paletteGroup,
-                                baseIndex
-                            );
-
-                            Color c = ResolveColor(_col, paletteIndex);
-
-                            int destX0 = tileOriginX + (x * zoom);
-                            int destY0 = tileOriginY + (y * zoom);
-
-                            for ( int zy = 0 ; zy < zoom ; zy++ )
-                            {
-                                int destY     = destY0 + zy;
-                                int rowOffset = destY * width * 4;
-
-                                for ( int zx = 0 ; zx < zoom ; zx++ )
-                                {
-                                    int destX = destX0 + zx;
-                                    int idx   = rowOffset + destX * 4;
-
-                                    buffer[idx + 0] = c.B;
-                                    buffer[idx + 1] = c.G;
-                                    buffer[idx + 2] = c.R;
-                                    buffer[idx + 3] = 0xFF;
-                                }
-                            }
-                        }
-                    }
+                    DrawTile(
+                        buffer ,
+                        width ,
+                        height ,
+                        tx ,
+                        ty ,
+                        cgxTile ,
+                        scrTile ,
+                        zoom ,
+                        spacing
+                    );
                 }
             }
 
+            // Grid in the gaps (same as ScrDebugRenderer)
             if ( _showGrid && zoom >= 2 )
             {
-                byte gridR = 128;
-                byte gridG = 128;
-                byte gridB = 128;
-                byte gridA = 255;
+                byte R = 128, G = 128, B = 128, A = 255;
 
-                // Vertical grid lines
-                for ( int tx = 1 ; tx < tilesWide ; tx++ )
+                // Vertical lines
+                for ( int tx = 1 ; tx < widthTiles ; tx++ )
                 {
                     int x = (tx * TileWidth * zoom) + ((tx - 1) * spacing);
 
                     for ( int y = 0 ; y < height ; y++ )
                     {
                         int idx = (y * width + x) * 4;
-                        buffer[idx + 0] = gridB;
-                        buffer[idx + 1] = gridG;
-                        buffer[idx + 2] = gridR;
-                        buffer[idx + 3] = gridA;
+                        buffer[idx + 0] = B;
+                        buffer[idx + 1] = G;
+                        buffer[idx + 2] = R;
+                        buffer[idx + 3] = A;
                     }
                 }
 
-                // Horizontal grid lines
-                for ( int ty = 1 ; ty < tilesHigh ; ty++ )
+                // Horizontal lines
+                for ( int ty = 1 ; ty < heightTiles ; ty++ )
                 {
                     int y = (ty * TileHeight * zoom) + ((ty - 1) * spacing);
 
@@ -141,10 +95,10 @@ namespace SNESassetsWPF.Rendering
                     for ( int x = 0 ; x < width ; x++ )
                     {
                         int idx = rowOffset + x * 4;
-                        buffer[idx + 0] = gridB;
-                        buffer[idx + 1] = gridG;
-                        buffer[idx + 2] = gridR;
-                        buffer[idx + 3] = gridA;
+                        buffer[idx + 0] = B;
+                        buffer[idx + 1] = G;
+                        buffer[idx + 2] = R;
+                        buffer[idx + 3] = A;
                     }
                 }
             }
@@ -157,24 +111,69 @@ namespace SNESassetsWPF.Rendering
             };
         }
 
-        // Same as CgxRenderer
-        private static int ComputePaletteIndex(int bitDepth , int paletteGroup , byte baseIndex)
+        private void DrawTile(
+            byte[] buffer ,
+            int bufferWidth ,
+            int bufferHeight ,
+            int tileX ,
+            int tileY ,
+            CgxTile cgxTile ,
+            ScrTile scrTile ,
+            int zoom ,
+            int spacing)
         {
-            return bitDepth switch
+            int tileOriginX = (tileX * TileWidth  * zoom) + (tileX * spacing);
+            int tileOriginY = (tileY * TileHeight * zoom) + (tileY * spacing);
+
+            int paletteRow = scrTile.PaletteIndex;
+
+            for ( int py = 0 ; py < TileHeight ; py++ )
             {
-                2 => ( paletteGroup << 2 ) | ( baseIndex & 0x03 ),
-                4 => ( paletteGroup << 4 ) | ( baseIndex & 0x0F ),
-                8 => baseIndex,
-                _ => baseIndex
-            };
-        }
+                int srcY = scrTile.VFlip ? (TileHeight - 1 - py) : py;
 
-        private static Color ResolveColor(ColFile col , int paletteIndex)
-        {
-            int row    = paletteIndex / ColorsPerRow;
-            int colIdx = paletteIndex % ColorsPerRow;
+                for ( int px = 0 ; px < TileWidth ; px++ )
+                {
+                    int srcX = scrTile.HFlip ? (TileWidth - 1 - px) : px;
 
-            return col.GetColor( row , colIdx );
+                    byte colorIndex = cgxTile.Pixels[srcY, srcX];
+
+                    if ( colorIndex == 0 )
+                        continue;
+
+                    if ( paletteRow < 0 || paletteRow >= 16 )
+                        continue;
+                    if ( colorIndex < 0 || colorIndex >= 16 )
+                        continue;
+
+                    Color c = _col.GetColor(paletteRow, colorIndex);
+
+                    int destX0 = tileOriginX + (px * zoom);
+                    int destY0 = tileOriginY + (py * zoom);
+
+                    for ( int zy = 0 ; zy < zoom ; zy++ )
+                    {
+                        int destY = destY0 + zy;
+                        if ( destY < 0 || destY >= bufferHeight )
+                            continue;
+
+                        int rowOffset = destY * bufferWidth * 4;
+
+                        for ( int zx = 0 ; zx < zoom ; zx++ )
+                        {
+                            int destX = destX0 + zx;
+                            if ( destX < 0 || destX >= bufferWidth )
+                                continue;
+
+                            int idx = rowOffset + destX * 4;
+
+                            buffer[idx + 0] = c.B;
+                            buffer[idx + 1] = c.G;
+                            buffer[idx + 2] = c.R;
+                            buffer[idx + 3] = 0xFF;
+                        }
+                    }
+                }
+            }
         }
     }
 }

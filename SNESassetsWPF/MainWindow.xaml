@@ -217,7 +217,8 @@
                     Header="Open asset folder..." />
             </MenuItem>
 
-            <MenuItem Header="View">
+            <MenuItem Header="CGX Tools">
+
                 <MenuItem
                     x:Name="menuShowCgxGrid"
                     DataContext="{Binding CgxViewer}"
@@ -225,6 +226,15 @@
                     IsCheckable="True"
                     IsChecked="{Binding ShowGrid}"
                     IsEnabled="{Binding IsGridToggleEnabled}" />
+
+                <MenuItem
+                    x:Name="menuExportCGXtoPNG"
+                    Command="{Binding ExportCgxPngCommand}"
+                    Header="Export CGX to PNG" />
+
+            </MenuItem>
+
+            <MenuItem Header="SCR Tools">
 
                 <MenuItem
                     x:Name="menuShowScrGrid"
@@ -235,10 +245,12 @@
                     IsEnabled="{Binding IsGridToggleEnabled}" />
 
                 <MenuItem
-                    x:Name="menuExportCGXtoPNG"
-                    Click="menuExportCGXtoPNG_Click"
-                    Header="Export CGX to PNG" />
+                    x:Name="menuExportSCRtoPNG"
+                    Command="{Binding ExportScrPngCommand}"
+                    Header="Export SCR to PNG" />
+
             </MenuItem>
+
         </Menu>
 
         <!--  Tabs to switch the loaded file list type  -->
@@ -609,10 +621,16 @@
 
                                 <ComboBox
                                     x:Name="scrDebugSelector"
+                                    Width="180"
                                     Margin="0,0,32,0"
                                     ItemsSource="{Binding ScrViewer.DebugModes}"
-                                    SelectedItem="{Binding ScrViewer.SelectedDebugMode}"
-                                    Visibility="{Binding ScrViewer.IsDebugOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    SelectedItem="{Binding ScrViewer.SelectedDebugMode}" />
+
+                                <CheckBox
+                                    x:Name="chkSwitchDebugEndian"
+                                    Margin="8,0,16,0"
+                                    Content="Big endian"
+                                    IsChecked="{Binding ScrViewer.ScrLittleEndian, Mode=TwoWay}" />
 
 
                                 <TextBlock
@@ -630,13 +648,13 @@
                                     Margin="0,0,0,0"
                                     HorizontalAlignment="Left"
                                     DataContext="{Binding ScrViewer}"
-                                    SelectedValue="{Binding Zoom, Mode=TwoWay}"
+                                    SelectedValue="{Binding ZoomLevel, Mode=TwoWay}"
                                     SelectedValuePath="Tag">
 
-                                    <ComboBoxItem Content="100%" Tag="100" />
-                                    <ComboBoxItem Content="200%" Tag="200" />
-                                    <ComboBoxItem Content="300%" Tag="300" />
-                                    <ComboBoxItem Content="400%" Tag="400" />
+                                    <ComboBoxItem Content="100%" Tag="1" />
+                                    <ComboBoxItem Content="200%" Tag="2" />
+                                    <ComboBoxItem Content="300%" Tag="3" />
+                                    <ComboBoxItem Content="400%" Tag="4" />
 
                                 </ComboBox>
 

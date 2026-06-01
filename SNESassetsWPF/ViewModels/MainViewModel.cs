@@ -1,4 +1,5 @@
-﻿using SNESassetsWPF.Formats;
+﻿using SNESassetsWPF.Enums;
+using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 using SNESassetsWPF.Services;
 using SNESassetsWPF.ViewModels;
@@ -47,6 +48,10 @@ namespace SNESassetsWPF.ViewModels
         public RelayCommand<FileNode> LoadScrCommand { get; private set; }
 
         public RelayCommand ShowColHexCommand { get; private set; }
+
+        // ⭐ NEW EXPORT COMMANDS
+        public ICommand ExportCgxPngCommand { get; }
+        public ICommand ExportScrPngCommand { get; }
 
 
         //
@@ -102,6 +107,13 @@ namespace SNESassetsWPF.ViewModels
                 ShowColRawHex ,
                 () => HasCol
             );
+
+            //
+            // NEW EXPORT COMMANDS
+            //
+            ExportCgxPngCommand = new RelayCommand( ExportCgxPng );
+            ExportScrPngCommand = new RelayCommand( ExportScrPng );
+
         }
 
 
@@ -207,7 +219,7 @@ namespace SNESassetsWPF.ViewModels
             CgxViewer.ColFile = col;
 
             //
-            // ⭐ SCR viewer must also update
+            // SCR viewer must also update
             //
             ScrViewer.ColFile = col;
         }
@@ -383,5 +395,122 @@ namespace SNESassetsWPF.ViewModels
             }
         }
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PNG EXPORT HELPERS
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        public static string BuildPngExportName(
+    string scrPath ,
+    string cgxPath ,
+    string colPath ,
+    int zoom ,
+    bool forceSingleRow = false ,
+    int selectedRow = -1 ,
+    ScrDebugMode debugMode = ScrDebugMode.None ,
+    bool isScrExport = false)
+        {
+            string scr = System.IO.Path.GetFileNameWithoutExtension(scrPath) ?? "unknown_SCR";
+            string cgx = System.IO.Path.GetFileNameWithoutExtension(cgxPath) ?? "unknown_CGX";
+            string col = System.IO.Path.GetFileNameWithoutExtension(colPath) ?? "unknown_COL";
+
+            string name;
+
+            if ( !isScrExport )
+            {
+                //
+                // CGX EXPORT FORMAT
+                //
+                name = $"CGX_{cgx}_COL_{col}";
+
+                if ( forceSingleRow && selectedRow >= 0 )
+                    name += $"_ROW_{selectedRow:X1}";
+            }
+            else
+            {
+                //
+                // SCR EXPORT FORMAT
+                //
+                name = $"SCR_{scr}_CGX_{cgx}_COL_{col}";
+
+                if ( debugMode != ScrDebugMode.None )
+                    name += $"_DBG_{debugMode}";
+            }
+
+            name += $"_{zoom}x.png";
+
+            return name;
+        }
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  CGX PNG EXPORT
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        private void ExportCgxPng()
+        {
+            if ( CgxViewer == null )
+                return;
+
+            string exportName = BuildPngExportName(
+                scrPath: null,
+                cgxPath: LoadedCgxPath,
+                colPath: LoadedColPath,
+                zoom: CgxViewer.ZoomLevel,
+                forceSingleRow: Palette.ForceSingleRow,
+                selectedRow: Palette.SelectedPaletteRowIndex,
+                debugMode: ScrDebugMode.None,
+                isScrExport: false
+            );
+
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "PNG Image|*.png",
+                FileName = exportName
+            };
+
+            if ( dlg.ShowDialog() == true )
+                CgxViewer.ExportPng( dlg.FileName , CgxViewer.ZoomLevel );
+        }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  SCR PNG EXPORT
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        private void ExportScrPng()
+        {
+            if ( ScrViewer == null )
+                return;
+
+            string exportName = BuildPngExportName(
+                scrPath: LoadedScrPath,
+                cgxPath: LoadedCgxPath,
+                colPath: LoadedColPath,
+                zoom: ScrViewer.ZoomLevel,
+                forceSingleRow: false,
+                selectedRow: -1,
+                debugMode: ScrViewer.SelectedDebugMode,
+                isScrExport: true
+            );
+
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "PNG Image|*.png",
+                FileName = exportName
+            };
+
+            if ( dlg.ShowDialog() == true )
+                ScrViewer.SavePng( dlg.FileName );
+        }
     }
 }

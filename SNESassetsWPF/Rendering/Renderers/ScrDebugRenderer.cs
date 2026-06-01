@@ -1,6 +1,7 @@
 ﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 using SNESassetsWPF.ViewModels;
+using SNESassetsWPF.Enums;
 using System;
 using System.Windows.Media;
 
@@ -8,72 +9,61 @@ namespace SNESassetsWPF.Rendering
 {
     public class ScrDebugRenderer
     {
-        private const int TileWidth = 8;
+        private const int TileWidth  = 8;
         private const int TileHeight = 8;
 
-        private readonly ScrFile _scr;
-        private readonly ScrDebugMode _mode;
-        private readonly bool _showGrid;
-
-        public ScrDebugRenderer(ScrFile scr , ScrDebugMode mode , bool showGrid)
+        public RenderResult Render(
+            ScrFile scr ,
+            ScrDebugMode mode ,
+            int zoom = 1 ,
+            bool showGrid = false)
         {
-            _scr = scr ?? throw new ArgumentNullException( nameof( scr ) );
-            _mode = mode;
-            _showGrid = showGrid;
-        }
+            if ( scr == null )
+                throw new ArgumentNullException( nameof( scr ) );
 
-        public RenderResult Render(int zoom)
-        {
             if ( zoom < 1 )
                 zoom = 1;
 
-            int tilesWide = _scr.WidthTiles;
-            int tilesHigh = _scr.HeightTiles;
+            int spacing = (showGrid && zoom >= 2) ? 1 : 0;
 
-            // 1px spacing only when grid is enabled AND zoom >= 2
-            int spacing = (_showGrid && zoom >= 2) ? 1 : 0;
+            int widthTiles  = scr.WidthTiles;
+            int heightTiles = scr.HeightTiles;
 
-            int baseWidth = tilesWide * TileWidth;
-            int baseHeight = tilesHigh * TileHeight;
+            int baseWidth  = widthTiles  * TileWidth;
+            int baseHeight = heightTiles * TileHeight;
 
-            int width = (baseWidth * zoom) + ((tilesWide - 1) * spacing);
-            int height = (baseHeight * zoom) + ((tilesHigh - 1) * spacing);
+            int width  = (baseWidth  * zoom) + ((widthTiles  - 1) * spacing);
+            int height = (baseHeight * zoom) + ((heightTiles - 1) * spacing);
 
             var buffer = new byte[width * height * 4];
 
-            // ───────────────────────────────────────────────
-            // Render tiles
-            // ───────────────────────────────────────────────
-            for ( int ty = 0 ; ty < tilesHigh ; ty++ )
+            // Render each SCR tile
+            for ( int ty = 0 ; ty < heightTiles ; ty++ )
             {
-                for ( int tx = 0 ; tx < tilesWide ; tx++ )
+                for ( int tx = 0 ; tx < widthTiles ; tx++ )
                 {
-                    ScrTile tile = _scr.Tiles[ty, tx];
+                    ScrTile tile = scr.Tiles[ty, tx];
 
-                    // Background colour from debug palette
-                    Color bg = ScrDebugTileColors.GetColorForTile(tile);
+                    Color bg =
+                        (mode == ScrDebugMode.TileIndex)
+                        ? ScrDebugTileColors.GetColorForTileIndexMode(ty, tx)
+                        : ScrDebugTileColors.GetColorForTile(tile);
 
-                    // 8×8 glyph overlay (tile index, palette, flags, etc.)
-                    Color[,] glyph = ScrDebugGlyphs.GetGlyphForMode(_mode, tile);
 
-                    int tileOriginX = (tx * TileWidth * zoom) + (tx * spacing);
+                    Color[,] glyph = ScrDebugGlyphs.GetGlyphForMode(mode, tile);
+
+                    int tileOriginX = (tx * TileWidth  * zoom) + (tx * spacing);
                     int tileOriginY = (ty * TileHeight * zoom) + (ty * spacing);
 
                     for ( int y = 0 ; y < TileHeight ; y++ )
                     {
                         for ( int x = 0 ; x < TileWidth ; x++ )
                         {
-                            // Default = background colour
-                            Color c = bg;
-
-                            // Overlay glyph pixel if present
-                            if ( glyph != null && glyph.HasPixel( x , y ) )
-                                c = glyph.GetPixelColor( x , y );
+                            Color c = glyph[y, x].A != 0 ? glyph[y, x] : bg;
 
                             int destX0 = tileOriginX + (x * zoom);
                             int destY0 = tileOriginY + (y * zoom);
 
-                            // Write zoomed block
                             for ( int zy = 0 ; zy < zoom ; zy++ )
                             {
                                 int destY = destY0 + zy;
@@ -95,33 +85,28 @@ namespace SNESassetsWPF.Rendering
                 }
             }
 
-            // ───────────────────────────────────────────────
-            // Draw grid (1px lines between tiles, never over tiles)
-            // ───────────────────────────────────────────────
-            if ( _showGrid && zoom >= 2 )
+            // Grid
+            if ( showGrid && zoom >= 2 )
             {
-                byte gridR = 128;
-                byte gridG = 128;
-                byte gridB = 128;
-                byte gridA = 255;
+                byte R = 128, G = 128, B = 128, A = 255;
 
-                // Vertical grid lines
-                for ( int tx = 1 ; tx < tilesWide ; tx++ )
+                // Vertical
+                for ( int tx = 1 ; tx < widthTiles ; tx++ )
                 {
                     int x = (tx * TileWidth * zoom) + ((tx - 1) * spacing);
 
                     for ( int y = 0 ; y < height ; y++ )
                     {
                         int idx = (y * width + x) * 4;
-                        buffer[idx + 0] = gridB;
-                        buffer[idx + 1] = gridG;
-                        buffer[idx + 2] = gridR;
-                        buffer[idx + 3] = gridA;
+                        buffer[idx + 0] = B;
+                        buffer[idx + 1] = G;
+                        buffer[idx + 2] = R;
+                        buffer[idx + 3] = A;
                     }
                 }
 
-                // Horizontal grid lines
-                for ( int ty = 1 ; ty < tilesHigh ; ty++ )
+                // Horizontal
+                for ( int ty = 1 ; ty < heightTiles ; ty++ )
                 {
                     int y = (ty * TileHeight * zoom) + ((ty - 1) * spacing);
 
@@ -129,10 +114,10 @@ namespace SNESassetsWPF.Rendering
                     for ( int x = 0 ; x < width ; x++ )
                     {
                         int idx = rowOffset + x * 4;
-                        buffer[idx + 0] = gridB;
-                        buffer[idx + 1] = gridG;
-                        buffer[idx + 2] = gridR;
-                        buffer[idx + 3] = gridA;
+                        buffer[idx + 0] = B;
+                        buffer[idx + 1] = G;
+                        buffer[idx + 2] = R;
+                        buffer[idx + 3] = A;
                     }
                 }
             }

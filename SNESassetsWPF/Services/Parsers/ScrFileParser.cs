@@ -1,5 +1,6 @@
-﻿using SNESassetsWPF.Models;
+﻿using SNESassetsWPF.Enums;
 using SNESassetsWPF.Formats;
+using SNESassetsWPF.Models;
 
 namespace SNESassetsWPF.Services
 {
@@ -38,7 +39,7 @@ namespace SNESassetsWPF.Services
         public static ScrFile Parse(byte[] data , int widthTiles , int heightTiles)
         {
             // ScrFile now requires a constructor
-            var scr = new ScrFile(widthTiles, heightTiles);
+            var scr = new ScrFile(data, widthTiles, heightTiles);
 
             int totalBlocks = data.Length / BlockSizeBytes;
 
@@ -49,6 +50,12 @@ namespace SNESassetsWPF.Services
 
             return scr;
         }
+
+        /// <summary>
+        /// Debug switch between Little and Big Endian
+        /// </summary>
+        public static ScrEndian DebugEndianMode { get; set; } = ScrEndian.LittleEndian;
+
 
         // ─────────────────────────────────────────────────────────────
         //  SINGLE BLOCK PARSER (32×32)
@@ -65,7 +72,7 @@ namespace SNESassetsWPF.Services
             {
                 for ( int x = 0 ; x < BlockTileSize ; x++ )
                 {
-                    ushort raw = ReadBigEndianWord(data, offset);
+                    ushort raw = ReadWord(data, offset);
                     offset += BytesPerTile;
 
                     scr.Tiles[y , x] = DecodeTile( raw );
@@ -106,7 +113,7 @@ namespace SNESassetsWPF.Services
 
                     int tileOffset = blockOffset + (i * BytesPerTile);
 
-                    ushort raw = ReadBigEndianWord(data, tileOffset);
+                    ushort raw = ReadWord(data, tileOffset);
                     scr.Tiles[globalY , globalX] = DecodeTile( raw );
                 }
             }
@@ -117,13 +124,22 @@ namespace SNESassetsWPF.Services
         // ─────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Reads a 16‑bit big‑endian word from the byte array.
+        /// Reads a 16‑bit word from the byte array.
         /// S‑CG‑CAD SCR files store tilemap entries big‑endian.
+        /// For debug reasons we can switch Endianess
         /// </summary>
-        private static ushort ReadBigEndianWord(byte[] data , int offset)
+        private static ushort ReadWord(byte[] data , int offset)
         {
-            return (ushort)( ( data[offset] << 8 ) | data[offset + 1] );
+            if ( DebugEndianMode == ScrEndian.BigEndian )
+            {
+                return (ushort)( ( data[offset] << 8 ) | data[offset + 1] );
+            }
+            else
+            {
+                return (ushort)( data[offset] | ( data[offset + 1] << 8 ) );
+            }
         }
+
 
         /// <summary>
         /// Decodes a single SCR tile word into a ScrTile.

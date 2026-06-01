@@ -208,37 +208,5 @@ namespace SNESassetsWPF
 
 
 
-        private void menuExportCGXtoPNG_Click(object sender , RoutedEventArgs e)
-        {
-            var vm = (MainViewModel)DataContext;
-            var viewer = vm.CgxViewer;
-
-            if ( viewer == null )
-            {
-                System.Windows.Forms.MessageBox.Show( "Viewer not initialized." );
-                return;
-            }
-
-            // These are the files the viewer actually loaded
-            string cgxName = System.IO.Path.GetFileNameWithoutExtension(vm.LoadedCgxPath) ?? "unknown_CGX";
-            string colName = System.IO.Path.GetFileNameWithoutExtension(vm.LoadedColPath) ?? "unknown_COL";
-
-            string exportName = $"COL_{colName}_CGX_{cgxName}_{viewer.ZoomLevel}x.png";
-
-            var dlg = new Microsoft.Win32.SaveFileDialog
-            {
-                Filter = "PNG Image|*.png",
-                FileName = exportName
-            };
-
-            if ( dlg.ShowDialog() != true )
-                return;
-
-            // Call the viewer’s export method (it already knows the loaded CGX/COL)
-            viewer.ExportPng( dlg.FileName , viewer.ZoomLevel );
-        }
-
-
-
     }
 }

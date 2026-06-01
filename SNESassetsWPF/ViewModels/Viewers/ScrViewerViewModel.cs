@@ -1,34 +1,14 @@
-﻿using SNESassetsWPF.Formats;
+﻿using SNESassetsWPF.Enums;
+using SNESassetsWPF.Formats;
 using SNESassetsWPF.Rendering;
+using SNESassetsWPF.Services;
 using System.Diagnostics;
 using System.Windows.Media.Imaging;
 
 namespace SNESassetsWPF.ViewModels
-{
-    /// <summary>
-    /// Debug overlay modes for SCR rendering.
-    /// </summary>
-    public enum ScrDebugMode
-    {
-        None,
-        TileIndex,
-        PaletteIndex,
-        Flags
-    }
-
-    /// <summary>
-    /// ViewModel responsible for rendering SCR files using either the
-    /// normal renderer or the debug renderer. Handles zoom, grid display,
-    /// debug overlays, palette-source toggling, and PNG export.
-    /// </summary>
+{   
     public class ScrViewerViewModel : ViewModelBase
     {
-        public static ScrDebugMode[] DebugModes { get; } =
-        {
-            ScrDebugMode.TileIndex,
-            ScrDebugMode.PaletteIndex,
-            ScrDebugMode.Flags
-        };
 
         // ─────────────────────────────────────────────────────────────
         // SCR / CGX / COL references
@@ -42,6 +22,10 @@ namespace SNESassetsWPF.ViewModels
             {
                 _scrFile = value;
                 OnPropertyChanged();
+
+                // Reset debug mode when a new SCR loads
+                SelectedDebugMode = ScrDebugMode.None;
+
                 RenderScr();
             }
         }
@@ -71,45 +55,24 @@ namespace SNESassetsWPF.ViewModels
         }
 
         // ─────────────────────────────────────────────────────────────
-        // Palette source toggle (SCR vs CGX)
+        // Palette source toggle
         // ─────────────────────────────────────────────────────────────
 
         private bool _useScrPaletteRow = true;
-
-        /// <summary>
-        /// When true: use SCR tile's palette row (normal SNES behaviour).
-        /// When false: use CGX tile's palette group (editor-side behaviour).
-        /// </summary>
         public bool UseScrPaletteRow
         {
             get => _useScrPaletteRow;
             set
             {
                 _useScrPaletteRow = value;
-                Debug.WriteLine( $"UseScrPaletteRow changed → {value}" );
                 OnPropertyChanged();
                 RenderScr();
             }
         }
 
         // ─────────────────────────────────────────────────────────────
-        // Debug mode
+        // Debug mode + options
         // ─────────────────────────────────────────────────────────────
-
-        private bool _debugMode;
-        public bool DebugMode
-        {
-            get => _debugMode;
-            set
-            {
-                _debugMode = value;
-                OnPropertyChanged();
-                OnPropertyChanged( nameof( IsDebugOptionsVisible ) );
-                RenderScr();
-            }
-        }
-
-        public bool IsDebugOptionsVisible => DebugMode;
 
         private ScrDebugMode _selectedDebugMode = ScrDebugMode.TileIndex;
         public ScrDebugMode SelectedDebugMode
@@ -122,28 +85,81 @@ namespace SNESassetsWPF.ViewModels
                 RenderScr();
             }
         }
+        public static ScrDebugMode[] DebugModes { get; } =
+        {
+            ScrDebugMode.None,
+            ScrDebugMode.TileIndex,
+            ScrDebugMode.PaletteRowIndex,
+            ScrDebugMode.Flip,
+            ScrDebugMode.Priority
+        };
+
+        // ─────────────────────────────────────────────────────────────
+        // SCR Endianness Toggle (THIS IS THE IMPORTANT PART)
+        // ─────────────────────────────────────────────────────────────
+
+        private bool _scrLittleEndian;
+        public bool ScrLittleEndian
+        {
+            get => _scrLittleEndian;
+            set
+            {
+                _scrLittleEndian = value;
+
+                // Update parser mode
+                ScrFileParser.DebugEndianMode =
+                    value ? ScrEndian.BigEndian : ScrEndian.LittleEndian;
+
+                OnPropertyChanged();
+
+                // Re-parse SCR file using new endian mode
+                if ( ScrFile?.RawBytes != null )
+                {
+                    ScrFile = ScrFileParser.Parse(
+                        ScrFile.RawBytes ,
+                        ScrFile.WidthTiles ,
+                        ScrFile.HeightTiles
+                    );
+                }
+
+                // NOW render the updated SCR
+                RenderScr();
+            }
+        }
 
         // ─────────────────────────────────────────────────────────────
         // Zoom + Grid
         // ─────────────────────────────────────────────────────────────
 
-        private int _zoom = 100;
-        public int Zoom
+        private int _zoomLevel = 1; // 1x, 2x, 3x, 4x
+        public int ZoomLevel
         {
-            get => _zoom;
+            get => _zoomLevel;
             set
             {
-                if ( value != 100 && value != 200 && value != 300 && value != 400 )
+                if ( value < 1 || value > 4 )
                     return;
 
-                _zoom = value;
+                _zoomLevel = value;
                 OnPropertyChanged();
                 OnPropertyChanged( nameof( IsGridToggleEnabled ) );
                 RenderScr();
             }
         }
 
-        public bool IsGridToggleEnabled => Zoom >= 200;
+        // Optional: if UI still uses 100/200/300/400
+        public int ZoomPercent
+        {
+            get => _zoomLevel * 100;
+            set
+            {
+                int level = value / 100;
+                ZoomLevel = level;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsGridToggleEnabled => ZoomLevel >= 2;
 
         private bool _showGrid;
         public bool ShowGrid
@@ -156,6 +172,7 @@ namespace SNESassetsWPF.ViewModels
                 RenderScr();
             }
         }
+
 
         // ─────────────────────────────────────────────────────────────
         // Bitmap + RenderResult
@@ -175,6 +192,18 @@ namespace SNESassetsWPF.ViewModels
         private RenderResult _lastRenderResult;
         public RenderResult LastRenderResult => _lastRenderResult;
 
+
+
+        // ─────────────────────────────────────────────────────────────
+        // Constructor
+        // ─────────────────────────────────────────────────────────────
+
+        public ScrViewerViewModel()
+        {
+            SelectedDebugMode = ScrDebugMode.None;
+        }
+
+
         // ─────────────────────────────────────────────────────────────
         // Rendering
         // ─────────────────────────────────────────────────────────────
@@ -184,19 +213,22 @@ namespace SNESassetsWPF.ViewModels
             if ( ScrFile == null )
                 return;
 
-            int zoomFactor = Zoom / 100;
+            int zoomFactor = ZoomLevel;                 // ← FIXED
             bool enableGrid = ShowGrid && zoomFactor >= 2;
 
             RenderResult result;
 
-            if ( DebugMode )
-            {
-                var renderer = new ScrDebugRenderer(
-                    ScrFile,
-                    SelectedDebugMode,
-                    enableGrid);
+            bool useDebug = SelectedDebugMode != ScrDebugMode.None;
 
-                result = renderer.Render( zoomFactor );
+            if ( useDebug )
+            {
+                var renderer = new ScrDebugRenderer();
+                result = renderer.Render(
+                    ScrFile ,
+                    SelectedDebugMode ,
+                    zoomFactor ,
+                    enableGrid
+                );
             }
             else
             {
@@ -208,20 +240,16 @@ namespace SNESassetsWPF.ViewModels
                     CgxFile,
                     ColFile,
                     enableGrid
-                );
+        );
 
                 result = renderer.Render( zoomFactor );
             }
 
             _lastRenderResult = result;
 
-            Debug.WriteLine(
-                $"SCR render: {ScrFile.WidthTiles}×{ScrFile.HeightTiles} tiles, " +
-                $"zoom={zoomFactor}, final={result.Width}×{result.Height}"
-            );
-
             Bitmap = BitmapFactory.FromRenderResult( result );
         }
+
 
         // ─────────────────────────────────────────────────────────────
         // PNG Export
@@ -232,18 +260,21 @@ namespace SNESassetsWPF.ViewModels
             if ( ScrFile == null )
                 return;
 
-            int zoomFactor = Zoom / 100;
+            int zoomFactor = ZoomLevel;   // ← FIXED
 
             RenderResult result;
 
-            if ( DebugMode )
-            {
-                var renderer = new ScrDebugRenderer(
-                    ScrFile,
-                    SelectedDebugMode,
-                    showGrid: false);
+            bool useDebug = SelectedDebugMode != ScrDebugMode.None;
 
-                result = renderer.Render( zoomFactor );
+            if ( useDebug )
+            {
+                var renderer = new ScrDebugRenderer();
+                result = renderer.Render(
+                    ScrFile ,
+                    SelectedDebugMode ,
+                    zoomFactor ,
+                    showGrid: false
+                );
             }
             else
             {
@@ -251,16 +282,17 @@ namespace SNESassetsWPF.ViewModels
                     return;
 
                 var renderer = new ScrRenderer(
-                    ScrFile,
-                    CgxFile,
-                    ColFile,
-                    showGrid: false
-                );
+            ScrFile,
+            CgxFile,
+            ColFile,
+            showGrid: false
+        );
 
                 result = renderer.Render( zoomFactor );
             }
 
             BitmapFactory.SavePng( result , path );
         }
+
     }
 }
