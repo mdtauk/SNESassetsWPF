@@ -1,22 +1,32 @@
-﻿using System;
-
-namespace SNESassetsWPF.Models
+﻿namespace SNESassetsWPF.Models
 {
     /// <summary>
-    /// Represents a single tile entry inside an SCR tilemap.
-    /// This is a pure model class used by renderers and the UI.
+    /// Represents a single 16‑bit S‑CG‑CAD SCR tile entry.
+    /// Raw is the original word from the SCR file.
+    /// Other fields are decoded from Raw according to the spec.
     /// </summary>
     public class ScrTile
     {
         /// <summary>
-        /// Tile index (0–1023). Points to a tile in the CGX file.
+        /// The original 16‑bit SCR word (big‑endian in file).
+        /// </summary>
+        public ushort Raw { get; set; }
+
+        /// <summary>
+        /// Decoded tile index (points into the CGX tile bank).
         /// </summary>
         public int TileIndex { get; set; }
 
         /// <summary>
-        /// Palette row index (0–7 for 4bpp, 0–15 for 8bpp).
+        /// Decoded palette index / palette group.
+        /// Exact meaning depends on S‑CG‑CAD SCR spec.
         /// </summary>
         public int PaletteIndex { get; set; }
+
+        /// <summary>
+        /// Priority bit (if supported by this SCR variant).
+        /// </summary>
+        public bool Priority { get; set; }
 
         /// <summary>
         /// Horizontal flip flag.
@@ -27,15 +37,5 @@ namespace SNESassetsWPF.Models
         /// Vertical flip flag.
         /// </summary>
         public bool VFlip { get; set; }
-
-        /// <summary>
-        /// Priority bit (0 or 1). Used by SNES PPU for layer priority.
-        /// </summary>
-        public bool Priority { get; set; }
-
-        public override string ToString()
-        {
-            return $"Tile={TileIndex}, Pal={PaletteIndex}, H={HFlip}, V={VFlip}, P={Priority}";
-        }
     }
 }
