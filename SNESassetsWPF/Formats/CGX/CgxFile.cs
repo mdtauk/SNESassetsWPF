@@ -5,18 +5,15 @@ namespace SNESassetsWPF.Formats
 {
     /// <summary>
     /// Represents an S‑CG‑CAD CGX file (designer‑side intermediate format).
-    /// 
-    /// Structure:
-    ///   [0x0000 ...] Raw tile data (2/4/8bpp), no header.
-    ///   [optional]   Prefix table (palette group / tile attributes).
-    ///   [optional]   Trailing metadata block (ASCII "NAK1989 S‑CG‑CAD ...").
-    /// 
-    /// NOTE:
-    ///   CGX files DO NOT store tilemap dimensions.
-    ///   TilesX/TilesY must be supplied externally (SCR, user choice, or default).
+    /// Contains raw tile data, prefix table, metadata, and decoded tiles.
     /// </summary>
     public class CgxFile
     {
+        /// <summary>
+        /// Full raw CGX file bytes (for debugging and verification).
+        /// </summary>
+        public byte[] RawFile { get; set; } = Array.Empty<byte>();
+
         /// <summary>
         /// Bit depth of the tile data (2, 4, or 8 bpp).
         /// </summary>
@@ -65,5 +62,24 @@ namespace SNESassetsWPF.Formats
         /// Decoded tiles (8×8 pixel indices + editor‑side attributes).
         /// </summary>
         public CgxTile[] Tiles { get; set; } = Array.Empty<CgxTile>();
+
+        // ------------------------------------------------------------
+        // Tile inspection helpers
+        // ------------------------------------------------------------
+
+        public CgxTile GetTile(int index) => Tiles[index];
+
+        public byte[] GetRawTileBytes(int index)
+        {
+            int offset = index * BytesPerTile;
+            return RawTileData.AsSpan( offset , BytesPerTile ).ToArray();
+        }
+
+        public (int X , int Y) GetTileSheetPosition(int index)
+        {
+            int x = index % TilesX;
+            int y = index / TilesX;
+            return (x , y);
+        }
     }
 }

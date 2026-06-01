@@ -14,15 +14,18 @@ namespace SNESassetsWPF.Formats
                 byte[] raw = File.ReadAllBytes(path);
                 int length = raw.Length;
 
+                result.RawFile = raw;
+
                 // Determine bit depth from known CGX sizes
                 result.BitDepth = length switch
                 {
-                    0x4500 => 2,  // 16 KB tiles + 1 KB prefix + 256 B metadata
-                    0x8500 => 4,  // 32 KB tiles + 1 KB prefix + 256 B metadata
-                    0x10100 => 8,  // 64 KB tiles + 256 B metadata
-                    _ => 4   // fallback
+                    0x4500 => 2,   // 16 KB tiles + 1 KB prefix + 256 B metadata
+                    0x8500 => 4,   // 32 KB tiles + 1 KB prefix + 256 B metadata
+                    0x10100 => 8,   // 64 KB tiles + 256 B metadata
+                    _ => 4    // fallback
                 };
 
+                // Compute tile data size
                 int tileBytes = result.BitDepth switch
                 {
                     2 => 0x4000,   // 16 KB
@@ -32,28 +35,34 @@ namespace SNESassetsWPF.Formats
                 };
 
                 // Extract raw tile data
-                result.TileData = new byte[tileBytes];
-                Buffer.BlockCopy( raw , 0x0000 , result.TileData , 0 , tileBytes );
+                result.TileData = raw.AsSpan( 0 , tileBytes ).ToArray();
 
-                // Extract trailing metadata block (ASCII)
-                // Always 0x100 bytes at the end
-                result.Metadata = new byte[0x100];
-                Buffer.BlockCopy( raw , length - 0x100 , result.Metadata , 0 , 0x100 );
+                // Metadata is ALWAYS last 0x100 bytes
+                result.Metadata = raw.AsSpan( length - 0x100 , 0x100 ).ToArray();
 
-                // Extract prefix table (if present)
-                // Only 2bpp/4bpp CGX have this
-                int prefixOffset = tileBytes + 0x100; // tiles + metadata
+                // Prefix table sits between tile data and metadata
                 int prefixLength = length - tileBytes - 0x100;
 
-                if ( prefixLength == 0x400 )
+                if ( prefixLength == 0x400 && ( result.BitDepth == 2 || result.BitDepth == 4 ) )
                 {
-                    result.PrefixTable = new byte[0x400];
-                    Buffer.BlockCopy( raw , tileBytes + 0x100 , result.PrefixTable , 0 , 0x400 );
+                    result.PrefixTable = raw.AsSpan( tileBytes , 0x400 ).ToArray();
                 }
                 else
                 {
                     result.PrefixTable = Array.Empty<byte>();
                 }
+
+                // Compute bytes per tile
+                result.BytesPerTile = result.BitDepth switch
+                {
+                    2 => 16,
+                    4 => 32,
+                    8 => 64,
+                    _ => 32
+                };
+
+                // Compute tile count
+                result.TileCount = tileBytes / result.BytesPerTile;
 
                 result.IsValid = true;
             }

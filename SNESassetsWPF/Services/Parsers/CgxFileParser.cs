@@ -29,14 +29,14 @@ namespace SNESassetsWPF.Formats
 
             var cgx = new CgxFile
             {
+                RawFile     = raw.RawFile,
                 BitDepth    = raw.BitDepth,
                 Metadata    = raw.Metadata,
-                RawTileData = raw.TileData
+                RawTileData = raw.TileData,
+                TilePrefixTable = raw.PrefixTable
             };
 
-            // ------------------------------------------------------------
-            // Determine bytes per tile based on bit depth
-            // ------------------------------------------------------------
+            // Determine bytes per tile
             int bytesPerTile = raw.BitDepth switch
             {
                 2 => TileSize2Bpp,
@@ -45,42 +45,47 @@ namespace SNESassetsWPF.Formats
                 _ => TileSize4Bpp
             };
 
-            int tileCount = raw.TileData.Length / bytesPerTile;
-
             cgx.BytesPerTile = bytesPerTile;
-            cgx.TileCount = tileCount;
-            cgx.Tiles = new CgxTile[tileCount];
+            cgx.TileCount = raw.TileData.Length / bytesPerTile;
+            cgx.Tiles = new CgxTile[cgx.TileCount];
 
-            // ------------------------------------------------------------
-            // Prefix table (palette group + editor attributes)
-            // ------------------------------------------------------------
-            if ( raw.PrefixTable != null && raw.PrefixTable.Length > 0 )
-                cgx.TilePrefixTable = raw.PrefixTable;
-            else
-                cgx.TilePrefixTable = new byte[tileCount]; // default: all zero
+            // Ensure prefix table exists
+            if ( cgx.TilePrefixTable == null || cgx.TilePrefixTable.Length == 0 )
+                cgx.TilePrefixTable = new byte[cgx.TileCount];
 
             // ------------------------------------------------------------
             // Decode each tile
             // ------------------------------------------------------------
-            for ( int t = 0 ; t < tileCount ; t++ )
+            for ( int t = 0 ; t < cgx.TileCount ; t++ )
             {
-                byte[,] decodedPixels = DecodeTile(raw.TileData, t * bytesPerTile, raw.BitDepth);
+                int tileOffset = t * bytesPerTile;
+
+                // Decode pixels
+                byte[,] decodedPixels = DecodeTile(raw.TileData, tileOffset, raw.BitDepth);
+
+                // Extract raw bytes for inspection
+                byte[] rawBytes = new byte[bytesPerTile];
+                Buffer.BlockCopy( raw.TileData , tileOffset , rawBytes , 0 , bytesPerTile );
 
                 // Safe prefix fetch
                 byte prefix = (t < cgx.TilePrefixTable.Length)
-                    ? cgx.TilePrefixTable[t]
-                    : (byte)0;
+            ? cgx.TilePrefixTable[t]
+            : (byte)0;
 
                 cgx.Tiles[t] = new CgxTile
                 {
+                    TileIndex = t ,
+                    BitDepth = raw.BitDepth ,
+                    RawBytes = rawBytes ,
                     Pixels = decodedPixels ,
                     PaletteGroup = prefix & PrefixPaletteMask ,
-                    // FlipX / FlipY / Priority left unset until bit layout confirmed
+                    // FlipX / FlipY / Priority remain unset until prefix format confirmed
                 };
             }
 
             return cgx;
         }
+
 
         // ------------------------------------------------------------
         // Tile decoding dispatcher
@@ -246,11 +251,18 @@ namespace SNESassetsWPF.Formats
 
             for ( int t = 0 ; t < cgx.TileCount ; t++ )
             {
+                int tileOffset = t * bytesPerTile;
+
+                // Decode pixels using new bit depth
                 byte[,] decodedPixels = DecodeTile(
             cgx.RawTileData,
-            t * bytesPerTile,
+            tileOffset,
             newBitDepth
         );
+
+                // Extract raw bytes for inspection
+                byte[] rawBytes = new byte[bytesPerTile];
+                Buffer.BlockCopy( cgx.RawTileData , tileOffset , rawBytes , 0 , bytesPerTile );
 
                 // Safe prefix fetch
                 byte prefix = (t < cgx.TilePrefixTable.Length)
@@ -259,6 +271,9 @@ namespace SNESassetsWPF.Formats
 
                 cgx.Tiles[t] = new CgxTile
                 {
+                    TileIndex = t ,
+                    BitDepth = newBitDepth ,
+                    RawBytes = rawBytes ,
                     Pixels = decodedPixels ,
                     PaletteGroup = prefix & PrefixPaletteMask ,
                     // FlipX / FlipY / Priority left unset until prefix bit layout confirmed
@@ -273,6 +288,7 @@ namespace SNESassetsWPF.Formats
                 cgx.TilePrefixTable = prefix;
             }
         }
+
 
     }
 }
