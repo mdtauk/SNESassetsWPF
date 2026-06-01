@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using SNESassetsWPF.Rendering.Fonts;
@@ -21,14 +20,10 @@ namespace SNESassetsWPF.Rendering
         }
 
         private static int GetGlyphWidth(Dictionary<char , FontGlyph> font)
-        {
-            return font.TryGetValue( '0' , out var g ) ? g.Width : 4;
-        }
+            => font.TryGetValue( '0' , out var g ) ? g.Width : 4;
 
         private static int GetGlyphHeight(Dictionary<char , FontGlyph> font)
-        {
-            return font.TryGetValue( '0' , out var g ) ? g.Height : 8;
-        }
+            => font.TryGetValue( '0' , out var g ) ? g.Height : 8;
 
         // ------------------------------------------------------------
         //  COLUMN HEADER (0..F)
@@ -38,14 +33,14 @@ namespace SNESassetsWPF.Rendering
             int zoom ,
             bool showGrid)
         {
-            var font    = SelectFont(zoom);
-            int gWidth  = GetGlyphWidth(font);
+            var font = SelectFont(zoom);
+            int gWidth = GetGlyphWidth(font);
             int gHeight = GetGlyphHeight(font);
 
             int tileSize = 8 * zoom;
-            int spacing  = (showGrid && zoom >= 2) ? 1 : 0;
+            int spacing = (showGrid && zoom >= 2) ? 1 : 0;
 
-            int width  = (tileColumns * tileSize) + ((tileColumns - 1) * spacing);
+            int width = (tileColumns * tileSize) + ((tileColumns - 1) * spacing);
             int height = tileSize;
             int stride = width * 4;
 
@@ -56,7 +51,9 @@ namespace SNESassetsWPF.Rendering
             for ( int col = 0 ; col < tileColumns ; col++ )
             {
                 string hex = col.ToString("X1");
-                int cellX = col * (tileSize + spacing);
+
+                // Match CGXRenderer tile origin
+                int cellX = (col * tileSize) + (col * spacing);
                 int glyphOffsetX = (tileSize - gWidth) / 2;
 
                 DrawHeaderGlyph(
@@ -87,18 +84,19 @@ namespace SNESassetsWPF.Rendering
             if ( tilesPerRow <= 0 )
                 throw new ArgumentOutOfRangeException( nameof( tilesPerRow ) );
 
-            var font    = SelectFont(zoom);
-            int gWidth  = GetGlyphWidth(font);
+            var font = SelectFont(zoom);
+            int gWidth = GetGlyphWidth(font);
             int gHeight = GetGlyphHeight(font);
 
             int tileSize = 8 * zoom;
-            int spacing  = (showGrid && zoom >= 2) ? 1 : 0;
+            int spacing = (showGrid && zoom >= 2) ? 1 : 0;
 
-            int tileRows = totalTiles / tilesPerRow;
+            int tileRows = (int)Math.Ceiling(totalTiles / (double)tilesPerRow);
 
-            int headerWidth = (gWidth * 3) + 4;
-            int height      = (tileRows * tileSize) + ((tileRows - 1) * spacing);
-            int stride      = headerWidth * 4;
+            // Add 4 px padding after the third hex digit for visual spacing
+            int headerWidth = (gWidth * 3) + 4 + 4;
+            int height = (tileRows * tileSize) + ((tileRows - 1) * spacing);
+            int stride = headerWidth * 4;
 
             byte[] buffer = new byte[stride * height];
 
@@ -112,7 +110,9 @@ namespace SNESassetsWPF.Rendering
             {
                 int tileIndex = row * tilesPerRow;
                 string hex = tileIndex.ToString("X3");
-                int cellY = row * (tileSize + spacing);
+
+                // Match CGXRenderer tile origin
+                int cellY = (row * tileSize) + (row * spacing);
 
                 DrawHeaderGlyph( buffer , headerWidth , height , stride , font , hex[0] , x0 , cellY + glyphOffsetY );
                 DrawHeaderGlyph( buffer , headerWidth , height , stride , font , hex[1] , x1 , cellY + glyphOffsetY );
@@ -128,14 +128,20 @@ namespace SNESassetsWPF.Rendering
         }
 
         // ------------------------------------------------------------
-        //  SPACER
+        //  SPACER (top-left corner)
         // ------------------------------------------------------------
         public static WriteableBitmap GenerateSpacer(
             int zoom ,
             bool showGrid)
         {
+            var font = SelectFont(zoom);
+            int gWidth = GetGlyphWidth(font);
+
             int tileSize = 8 * zoom;
-            int width  = 16 * zoom;
+
+            // Match row header width including the new 4 px padding
+            int headerWidth = (gWidth * 3) + 4 + 4;
+            int width = headerWidth;
             int height = tileSize;
             int stride = width * 4;
 
@@ -172,7 +178,7 @@ namespace SNESassetsWPF.Rendering
         }
 
         // ------------------------------------------------------------
-        //  DRAW GLYPH (pixel‑perfect, no zoom scaling)
+        //  DRAW GLYPH (pixel‑perfect)
         // ------------------------------------------------------------
         private static void DrawHeaderGlyph(
             byte[] buffer ,
@@ -194,7 +200,7 @@ namespace SNESassetsWPF.Rendering
                 for ( int gx = 0 ; gx < glyph.Width ; gx++ )
                 {
                     int byteIndex = rowOffset + (gx / 8);
-                    int bitIndex  = 7 - (gx % 8);
+                    int bitIndex = 7 - (gx % 8);
 
                     if ( byteIndex >= glyph.Data.Length )
                         continue;
@@ -234,7 +240,8 @@ namespace SNESassetsWPF.Rendering
 
             for ( int col = 1 ; col < cols ; col++ )
             {
-                int x = col * tileSize + (col - 1) * spacing;
+                // Match CGXRenderer: line between tiles
+                int x = (col * tileSize) + ((col - 1) * spacing);
                 if ( x < 0 || x >= width ) continue;
 
                 for ( int y = 0 ; y < height ; y++ )
@@ -261,7 +268,8 @@ namespace SNESassetsWPF.Rendering
 
             for ( int row = 1 ; row < rows ; row++ )
             {
-                int y = row * tileSize + (row - 1) * spacing;
+                // Match CGXRenderer: line between tiles
+                int y = (row * tileSize) + ((row - 1) * spacing);
                 if ( y < 0 || y >= height ) continue;
 
                 for ( int x = 0 ; x < width ; x++ )

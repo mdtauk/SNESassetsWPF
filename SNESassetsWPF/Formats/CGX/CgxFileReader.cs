@@ -19,10 +19,10 @@ namespace SNESassetsWPF.Formats
                 // Determine bit depth from known CGX sizes
                 result.BitDepth = length switch
                 {
-                    0x4500 => 2,   // 16 KB tiles + 1 KB prefix + 256 B metadata
-                    0x8500 => 4,   // 32 KB tiles + 1 KB prefix + 256 B metadata
-                    0x10100 => 8,   // 64 KB tiles + 256 B metadata
-                    _ => 4    // fallback
+                    0x4500 => 2,    // 16 KB tiles + 0x100 metadata + 0x400 prefix
+                    0x8500 => 4,    // 32 KB tiles + 0x100 metadata + 0x400 prefix
+                    0x10100 => 8,    // 64 KB tiles + 0x100 metadata (no prefix)
+                    _ => 4     // fallback
                 };
 
                 // Compute tile data size
@@ -34,21 +34,34 @@ namespace SNESassetsWPF.Formats
                     _ => 0x8000
                 };
 
-                // Extract raw tile data
+                // Extract raw tile data (always from byte 0)
                 result.TileData = raw.AsSpan( 0 , tileBytes ).ToArray();
 
-                // Metadata is ALWAYS last 0x100 bytes
-                result.Metadata = raw.AsSpan( length - 0x100 , 0x100 ).ToArray();
-
-                // Prefix table sits between tile data and metadata
-                int prefixLength = length - tileBytes - 0x100;
-
-                if ( prefixLength == 0x400 && ( result.BitDepth == 2 || result.BitDepth == 4 ) )
+                if ( result.BitDepth == 2 || result.BitDepth == 4 )
                 {
-                    result.PrefixTable = raw.AsSpan( tileBytes , 0x400 ).ToArray();
+                    // 2/4bpp S‑CG‑CAD CGX layout:
+                    // [0x0000..tileBytes-1]   tile data
+                    // [tileBytes..tileBytes+0xFF]   metadata (ASCII "NAK1989 S‑CG‑CAD Ver...")
+                    // [tileBytes+0x100..tileBytes+0x4FF] prefix table (0x400 bytes)
+
+                    // Metadata at tileBytes
+                    result.Metadata = raw.AsSpan( tileBytes , 0x100 ).ToArray();
+
+                    // Prefix table immediately after metadata
+                    int prefixOffset = tileBytes + 0x100;
+                    int prefixLength = length - prefixOffset;
+
+                    if ( prefixLength == 0x400 )
+                        result.PrefixTable = raw.AsSpan( prefixOffset , 0x400 ).ToArray();
+                    else
+                        result.PrefixTable = Array.Empty<byte>();
                 }
                 else
                 {
+                    // 8bpp layout:
+                    // [0x0000..0xFFFF] tile data
+                    // [0x10000..0x100FF] metadata (last 0x100 bytes), no prefix table
+                    result.Metadata = raw.AsSpan( length - 0x100 , 0x100 ).ToArray();
                     result.PrefixTable = Array.Empty<byte>();
                 }
 
