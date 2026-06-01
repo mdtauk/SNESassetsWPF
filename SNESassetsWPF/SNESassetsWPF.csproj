@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\columns.png" />
+    <None Remove="Assets\rows.png" />
+    <None Remove="Assets\spacer.png" />
+    <None Remove="Assets\test.cgx" />
+    <None Remove="Assets\test.col" />
+    <None Remove="Assets\test.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\test.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\test.cgx" />
+    <EmbeddedResource Include="Assets\test.col" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Models\FileNode.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft-WindowsAPICodePack-Shell" Version="1.1.5" />
+  </ItemGroup>
+
+</Project>

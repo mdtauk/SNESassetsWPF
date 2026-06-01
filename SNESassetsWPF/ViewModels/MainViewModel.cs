@@ -1,0 +1,387 @@
+﻿using SNESassetsWPF.Formats;
+using SNESassetsWPF.Models;
+using SNESassetsWPF.Services;
+using SNESassetsWPF.ViewModels;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
+using System.Text;
+using System.Windows.Input;
+
+namespace SNESassetsWPF.ViewModels
+{
+    public class MainViewModel : ViewModelBase
+    {
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  TREE VIEW MODELS
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        public ColTreeViewModel ColTree { get; }
+        public CgxTreeViewModel CgxTree { get; }
+        public ScrTreeViewModel ScrTree { get; }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  VIEW MODELS
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        public PaletteViewModel Palette { get; } = new();
+        public CgxViewerViewModel CgxViewer { get; } = new();
+        public ScrViewerViewModel ScrViewer { get; } = new();
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  COMMANDS
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        public RelayCommand ChooseFolderCommand { get; private set; }
+
+        public RelayCommand<FileNode> LoadColCommand { get; private set; }
+        public RelayCommand<FileNode> LoadCgxCommand { get; private set; }
+        public RelayCommand<FileNode> LoadScrCommand { get; private set; }
+
+        public RelayCommand ShowColHexCommand { get; private set; }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  LOADED FILE PATHS
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        public string LoadedCgxPath { get; private set; }
+        public string LoadedColPath { get; private set; }
+        public string LoadedScrPath { get; private set; }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  CONSTRUCTOR
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        public MainViewModel()
+        {
+            //
+            // COL TREE
+            //
+            ColTree = new ColTreeViewModel();
+            ColTree.LoadBuiltIn();
+            ColTree.SelectBuiltIn();
+            LoadCol( ColTree.BuiltInFileNode );
+
+            //
+            // CGX TREE
+            //
+            CgxTree = new CgxTreeViewModel();
+            CgxTree.LoadBuiltIn();
+            CgxTree.SelectBuiltIn();
+            LoadCgx( CgxTree.BuiltInFileNode );
+
+            //
+            // SCR TREE
+            //
+            ScrTree = new ScrTreeViewModel();
+
+            //
+            // COMMANDS
+            //
+            ChooseFolderCommand = new RelayCommand( ChooseFolder );
+
+            LoadColCommand = new RelayCommand<FileNode>( LoadCol );
+            LoadCgxCommand = new RelayCommand<FileNode>( LoadCgx );
+            LoadScrCommand = new RelayCommand<FileNode>( LoadScr );
+
+            ShowColHexCommand = new RelayCommand(
+                ShowColRawHex ,
+                () => HasCol
+            );
+        }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  FOLDER SELECTION
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        private string _selectedFolder = "Please choose a folder containing S-CAD assets";
+        public string SelectedFolder
+        {
+            get => _selectedFolder;
+            set
+            {
+                _selectedFolder = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private void ChooseFolder()
+        {
+            var dlg = new Microsoft.Win32.OpenFolderDialog();
+
+            if ( dlg.ShowDialog() == true )
+            {
+                SelectedFolder = dlg.FolderName;
+
+                // Load all three trees
+                ColTree.LoadFolder( dlg.FolderName );
+                CgxTree.LoadFolder( dlg.FolderName );
+                ScrTree.LoadFolder( dlg.FolderName );
+            }
+        }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  COL LOADING
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        private PaletteEntry _selectedPaletteEntry;
+        public PaletteEntry SelectedPaletteEntry
+        {
+            get => _selectedPaletteEntry;
+            set
+            {
+                _selectedPaletteEntry = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private ColFile _currentCol;
+        public ColFile CurrentCol
+        {
+            get => _currentCol;
+            set
+            {
+                _currentCol = value;
+                OnPropertyChanged();
+                OnPropertyChanged( nameof( HasCol ) );
+            }
+        }
+
+        public bool HasCol => CurrentCol != null;
+
+        private void LoadCol(FileNode fileNode)
+        {
+            if ( fileNode == null )
+                return;
+
+            Debug.WriteLine( $"LoadCol called for: {fileNode.FullPath}" );
+
+            int previousRow = Palette.ForceSingleRow ? Palette.SelectedPaletteRowIndex : -1;
+
+            // Read raw COL file
+            var reader = new ColFileReader();
+            var raw = reader.Read(fileNode.FullPath);
+
+            LoadedColPath = fileNode.FullPath;
+
+            // Parse COL
+            var parser = new ColFileParser();
+            var col = parser.Parse(raw);
+
+            CurrentCol = col;
+
+            // Update palette UI
+            LoadPaletteIntoViewModel( col );
+
+            // Restore selected row if needed
+            if ( Palette.ForceSingleRow &&
+                previousRow >= 0 &&
+                previousRow < Palette.PaletteRows.Count )
+            {
+                Palette.SelectedPaletteRowIndex = previousRow;
+            }
+
+            //
+            // CGX viewer
+            //
+            CgxViewer.ColFile = col;
+
+            //
+            // ⭐ SCR viewer must also update
+            //
+            ScrViewer.ColFile = col;
+        }
+
+
+        private void LoadPaletteIntoViewModel(ColFile col)
+        {
+            Palette.PaletteRows.Clear();
+
+            for ( int p = 0 ; p < 16 ; p++ )
+            {
+                var row = new PaletteRowViewModel();
+
+                for ( int c = 0 ; c < 16 ; c++ )
+                {
+                    var snes = col.RawColors[p, c];
+                    var rgb = col.RgbColors[p, c];
+
+                    row.Colors.Add( new PaletteEntry
+                    {
+                        SnesColor = snes ,
+                        SnesColorString = snes.ToHexPair() ,
+                        RgbColor = rgb ,
+                        RGBColorString = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}"
+                    } );
+                }
+
+                Palette.PaletteRows.Add( row );
+            }
+        }
+
+
+        public void ShowColRawHex()
+        {
+            if ( CurrentCol == null )
+                return;
+
+            // Extract raw bytes
+            byte[] raw = new byte[512];
+            int index = 0;
+
+            for ( int p = 0 ; p < 16 ; p++ )
+            {
+                for ( int c = 0 ; c < 16 ; c++ )
+                {
+                    var snes = CurrentCol.RawColors[p, c];
+                    raw[index++] = snes.Low;
+                    raw[index++] = snes.High;
+                }
+            }
+
+            // Convert to hex
+            var hexBuilder = new StringBuilder();
+
+            for ( int i = 0 ; i < raw.Length ; i++ )
+            {
+                hexBuilder.Append( raw[i].ToString( "X2" ) );
+                hexBuilder.Append( ' ' );
+
+                if ( ( i + 1 ) % 16 == 0 )
+                    hexBuilder.AppendLine();
+            }
+
+            string hexText = hexBuilder.ToString();
+
+            // Extract ASCII header
+            string asciiHeader = "(no ASCII header found)";
+
+            if ( CurrentCol.Metadata != null && CurrentCol.Metadata.Length > 0 )
+            {
+                string rawHeader = Encoding.ASCII.GetString(CurrentCol.Metadata);
+
+                int nullIndex = rawHeader.IndexOf('\0');
+                if ( nullIndex >= 0 )
+                    rawHeader = rawHeader.Substring( 0 , nullIndex );
+
+                asciiHeader = new string( rawHeader.Where( c => c >= 32 && c <= 126 ).ToArray() );
+                asciiHeader = asciiHeader.Trim();
+            }
+
+            var win = new HexWindow(hexText, asciiHeader);
+            win.Owner = System.Windows.Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  CGX LOADING
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        private void LoadCgx(FileNode fileNode)
+        {
+            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
+                return;
+
+            Debug.WriteLine( $"LoadCgx called for: {fileNode.FullPath}" );
+
+            try
+            {
+                var reader = new CgxFileReader();
+                var readResult = reader.Read(fileNode.FullPath);
+
+                LoadedCgxPath = fileNode.FullPath;
+
+                if ( !readResult.IsValid )
+                {
+                    Debug.WriteLine( "CGX read error: " + readResult.ErrorMessage );
+                    return;
+                }
+
+                var parser = new CgxFileParser();
+                var cgx = parser.Parse(readResult);
+
+                //
+                // CGX viewer
+                //
+                CgxViewer.CgxFile = cgx;
+
+                //
+                // ⭐ SCR viewer must also update
+                //
+                ScrViewer.CgxFile = cgx;
+            }
+            catch ( Exception ex )
+            {
+                Debug.WriteLine( "LoadCgx exception: " + ex.Message );
+            }
+        }
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  SCR LOADING
+        // ─────────────────────────────────────────────────────────────
+        //
+
+        private void LoadScr(FileNode fileNode)
+        {
+            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
+                return;
+
+            Debug.WriteLine( $"LoadScr called for: {fileNode.FullPath}" );
+
+            try
+            {
+                // New: ScrFileReader auto-detects 32×32 or 64×64
+                var readResult = ScrFileReader.Load(fileNode.FullPath);
+
+                LoadedScrPath = fileNode.FullPath;
+
+                if ( !readResult.Success )
+                {
+                    Debug.WriteLine( "SCR read error: " + readResult.ErrorMessage );
+                    return;
+                }
+
+                var scr = readResult.Scr;
+
+                Debug.WriteLine(
+                    $"SCR loaded: {scr.WidthTiles}×{scr.HeightTiles} tiles " +
+                    $"({scr.WidthTiles * 8}×{scr.HeightTiles * 8} px)" );
+
+                // Send SCR + current CGX/COL to viewer
+                ScrViewer.ScrFile = scr;
+                ScrViewer.CgxFile = CgxViewer.CgxFile;
+                ScrViewer.ColFile = CurrentCol;
+            }
+            catch ( Exception ex )
+            {
+                Debug.WriteLine( "LoadScr exception: " + ex.Message );
+            }
+        }
+
+    }
+}

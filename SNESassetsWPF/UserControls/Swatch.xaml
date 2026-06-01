@@ -1,0 +1,128 @@
+﻿<UserControl
+    x:Class="SNESassetsWPF.UserControls.Swatch"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="clr-namespace:SNESassetsWPF.Helpers"
+    xmlns:local="clr-namespace:SNESassetsWPF.UserControls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:Name="SwatchUC"
+    Width="16"
+    Height="16"
+    d:Background="HotPink"
+    d:DesignHeight="32"
+    d:DesignWidth="32"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <UserControl.Resources />
+
+    <Grid x:Name="SwatchRoot">
+        <Border
+            x:Name="SwatchBorder"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Background="{Binding RgbColorBrush}"
+            IsHitTestVisible="True"
+            ToolTipService.BetweenShowDelay="0"
+            ToolTipService.InitialShowDelay="0100"
+            ToolTipService.ShowDuration="9000">
+            <Border.ToolTip>
+                <StackPanel>
+                    <TextBlock FontWeight="Bold" Text="{Binding SnesColorString}" />
+                    <TextBlock Text="{Binding RGBColorString}" />
+                </StackPanel>
+            </Border.ToolTip>
+
+            <Rectangle
+                x:Name="InvalidMarker"
+                Width="4"
+                Height="4"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Fill="{DynamicResource TextFillColorPrimaryBrush}"
+                Stroke="Transparent"
+                StrokeThickness="0"
+                Visibility="Collapsed" />
+        </Border>
+
+
+        <Border
+            x:Name="SwatchBorderUnset"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Visibility="Collapsed">
+            <Border.Background>
+                <DrawingBrush
+                    TileMode="Tile"
+                    Viewbox="0,0,8,8"
+                    ViewboxUnits="Absolute"
+                    Viewport="0,0,4,4"
+                    ViewportUnits="Absolute">
+                    <DrawingBrush.Drawing>
+                        <DrawingGroup>
+                            <GeometryDrawing Brush="#AAFFFFFF">
+                                <GeometryDrawing.Geometry>
+                                    <RectangleGeometry Rect="0,0,8,8" />
+                                </GeometryDrawing.Geometry>
+                            </GeometryDrawing>
+
+                            <GeometryDrawing Brush="#AA000000">
+                                <GeometryDrawing.Geometry>
+                                    <GeometryGroup>
+                                        <RectangleGeometry Rect="0,0,4,4" />
+                                        <RectangleGeometry Rect="4,4,4,4" />
+                                    </GeometryGroup>
+                                </GeometryDrawing.Geometry>
+                            </GeometryDrawing>
+                        </DrawingGroup>
+                    </DrawingBrush.Drawing>
+                </DrawingBrush>
+            </Border.Background>
+        </Border>
+
+
+        <VisualStateManager.VisualStateGroups>
+
+            <VisualStateGroup x:Name="ValidationStates">
+                <VisualState x:Name="Valid" />
+                <VisualState x:Name="Invalid">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="InvalidMarker" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Visible}" />
+                        </ObjectAnimationUsingKeyFrames>
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+
+
+            <VisualStateGroup x:Name="PlaceholderStates">
+                <VisualState x:Name="Normal">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwatchBorderUnset" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Collapsed}" />
+                        </ObjectAnimationUsingKeyFrames>
+
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwatchBorder" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Visible}" />
+                        </ObjectAnimationUsingKeyFrames>
+                    </Storyboard>
+                </VisualState>
+
+                <VisualState x:Name="Placeholder">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwatchBorderUnset" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Visible}" />
+                        </ObjectAnimationUsingKeyFrames>
+
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwatchBorder" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Collapsed}" />
+                        </ObjectAnimationUsingKeyFrames>
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+
+        </VisualStateManager.VisualStateGroups>
+    </Grid>
+
+</UserControl>

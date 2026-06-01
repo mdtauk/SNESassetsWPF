@@ -1,0 +1,205 @@
+﻿# COL format — tile colour (SNES / S-CG-CAD)
+### Based on RetroReversing’s S‑CG‑CAD documentation
+
+This document describes the **COL palette file format** used by Nintendo’s **S‑CG‑CAD** graphics tool on Sony NEWS workstations.
+
+The COL file contains:
+
+1. **Colour Data** (always present, 0x200 bytes)  
+2. **Tool Metadata** (optional, S‑CG‑CAD specific, 0x200 bytes)
+---
+
+# 1. File Structure Overview
+
+```
++-------------------------------+
+| 0x0000 - 0x01FF (512 bytes)   |
+| Colour Data (256 colours)     |
+| SNES BGR555, little-endian    |
++-------------------------------+
+| 0x0200 - 0x02FF (256 bytes)   |
+| Tool Header Block             |
+| ASCII: "NAK1989 S-CG-CADVer"  |
++-------------------------------+
+| 0x0300 - 0x03FF (256 bytes)   |
+| Per-row Tool Metadata         |
+| 32 rows × 4 bytes each        |
++-------------------------------+
+```
+
+| Offset | Size | Description |
+|--------|------|-------------|
+| `0x0000` | 0x200 | Colour data (256 × 2‑byte BGR555 words) |
+| `0x0200` | 0x100 | Tool header block (S‑CG‑CAD metadata) |
+| `0x0300` | 0x100 | Per‑row metadata (32 rows × 4 bytes) |
+
+A typical S‑CG‑CAD save is **0x400 bytes total**.
+
+---
+
+# 2. Colour Data (0x0000–0x01FF)
+
+This section contains the **SNES palette colours**.
+
+## 2.1 Encoding
+
+| Property | Value |
+|----------|--------|
+| Format | SNES BGR555 |
+| Endianness | Little‑endian |
+| Colours | 256 |
+| Bytes per colour | 2 |
+| Total size | 512 bytes |
+
+### Bit Layout (from spec)
+
+| Bits | Meaning |
+|------|---------|
+| 0-4 | red |
+| 5-9 | green |
+| 10-14 | blue |
+| 15 | unused (0) |
+
+
+### Decode Rules (from spec)
+
+```
+read 16-bit little-endian value v
+r5 = (v >> 0) & 0x1F
+g5 = (v >> 5) & 0x1F
+b5 = (v >> 10) & 0x1F
+
+expand 5-bit to 8-bit:
+c8 = (c5 << 3) | (c5 >> 2)
+```
+
+### Layout Diagram
+| Row | Colours |
+|---|---|
+| Row 0: | 16 colours (0x0000)    |
+| Row 1: | 16 colours (0x0020)    |
+| ...    | ...                    |
+| Row 15: | 16 colours (0x01E0)   |
+
+Below is the data layout
+
+| Offset | Size | Meaning |
+|--------|------|---------|
+| `0x0000` | 2 | Colour 0, row 0 |
+| `0x0002` | 2 | Colour 1, row 0 |
+| ... | ... | ... |
+| `0x001E` | 2 | Colour 15, row 0 |
+| `0x0020` | 2 | Colour 0, row 1 |
+| ... | ... | ... |
+
+### Notes from spec
+
+- 16 palette rows × 16 colours each  
+- Row 0 is commonly treated as transparent/backdrop‑like  
+- This is **flat**, not structured — the row concept is a convention
+
+---
+
+# 3. Tool Metadata (0x0200–0x03FF)
+
+This section is **not used by the SNES hardware**.  
+It is written by **S‑CG‑CAD** and is required for round‑tripping files through the tool.
+
+## 3.1 Tool Header Block (0x0200–0x02FF)
+
+| Offset | Size | Meaning |
+|--------|------|---------|
+| `0x0200` | 0x100 | Tool header block |
+
+### Documented behaviour
+
+- Begins with ASCII text:  
+  `"NAK1989 S-CG-CADVer..."`  
+- Appears in multiple assets  
+- Purpose: internal tool metadata  
+- Should be preserved exactly when rewriting files
+
+
+```
+0x0200: "NAK1989 S-CG-CADVer1.XX..."
+0x0210: [unknown tool fields]
+...
+0x02FF: end of header block
+```
+
+No further structure is documented.
+
+---
+
+## 3.2 Per‑Row Tool Metadata (0x0300–0x03FF)
+
+| Offset | Size | Meaning |
+|--------|------|---------|
+| `0x0300` | 0x80 | 32 rows × 4 bytes (actual data) |
+| `0x0380` | 0x80 | Reserved / zero padding |
+
+### Structure
+
+- 32 entries  
+- 4 bytes per entry  
+- Total meaningful data: 128 bytes  
+- Remaining 128 bytes are reserved/zero
+
+### How S‑CG‑CAD writes these bytes
+
+Each 4‑byte entry is copied from:
+
+- The low byte of four 32‑bit words  
+- In a 16‑byte‑per‑row structure  
+- Offsets: `+3`, `+7`, `+0x0B`, `+0x0F`
+
+### Purpose
+
+These bytes represent:
+
+> “S‑CG‑CAD editor‑side palette table state (preview colors / attribute selectors) rather than SNES runtime palette data.”
+
+Meaning:
+
+- They affect how the **editor UI** displays the palette  
+- They do **not** affect SNES hardware  
+- They should be preserved when rewriting files
+
+---
+
+# 4. cgbank (S‑CG‑CAD Behaviour)
+
+This is **not part of the COL file itself**, but appears in the backup stream format.
+
+### Documented behaviour
+
+cgbank controls how the editor maps palette indices into its workstation‑side 8‑bit colour table.
+
+Modes:
+
+| cgbank | Behaviour |
+|--------|-----------|
+| 0 | 32‑entry repeating window (`index & 0x1F`) |
+| 1 | 128‑entry repeating window (`index & 0x7F`) |
+| 2 | Updates all 256 entries (with reserved indices) |
+
+This is **editor behaviour**, not SNES behaviour.
+
+---
+
+# 5. What Metadata Should an Asset Viewer Expose?
+
+Since the metadata is **tool‑specific** and **not human‑authored**, the recommended approach is:
+
+## 5.1 Useful to Expose
+
+| Field | Reason |
+|-------|--------|
+| Tool header block (0x0200–0x02FF) | Useful for research; contains version strings |
+| Per‑row metadata (0x0300–0x037F) | Useful for debugging S‑CG‑CAD behaviour |
+| Reserved bytes (0x0380–0x03FF) | Should be preserved; can be shown as hex |
+
+---
+
+Generated by Co-Pilot from
+https://www.retroreversing.com/snes-file-formats
