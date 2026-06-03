@@ -1,121 +1,106 @@
-﻿using SNESassetsWPF.Enums;
-using SNESassetsWPF.Formats;
+﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 
 namespace SNESassetsWPF.Services
 {
     /// <summary>
-    /// Parses raw SCR file bytes into a ScrFile object.
-    ///
-    /// According to the RetroReversing S‑CG‑CAD documentation:
-    /// - SCR files contain tilemap data exported by the S‑CG‑CAD editor.
-    /// - Data is stored as big‑endian 16‑bit tile words.
-    /// - A full SCR contains 4 blocks of 32×32 tiles (each 2048 bytes).
-    /// - Blocks are arranged in a 2×2 grid:
-    ///
-    ///       Block 0 | Block 1
-    ///       --------+--------
-    ///       Block 2 | Block 3
-    ///
-    /// - Some SCR files contain only a single 32×32 block.
-    ///
-    /// This parser follows the S‑CG‑CAD SCR format *exactly as documented*
-    /// by RetroReversing — not generic SNES hardware tilemap rules.
+    /// Parses raw S‑CG‑CAD SCR file bytes into a ScrFile object.
+    /// Supports 32×32, 64×32, 32×64, and 64×64 layouts.
+    /// Reads tilemap, footer, and visibility mask in correct order.
     /// </summary>
     public static class ScrFileParser
     {
-        private const int BlockTileSize   = 32;
-        private const int TilesPerBlock   = BlockTileSize * BlockTileSize; // 1024
-        private const int BytesPerTile    = 2;                             // 16‑bit word
-        private const int BlockSizeBytes  = TilesPerBlock * BytesPerTile;  // 2048
-        private const int FullBlockCount  = 4;
-        private const int FullScrTileSize = BlockTileSize * 2;             // 64×64 tiles
+        private const int BlockTileSize  = 32;
+        private const int TilesPerBlock  = BlockTileSize * BlockTileSize; // 1024
+        private const int BytesPerTile   = 2;
+        private const int BlockSizeBytes = TilesPerBlock * BytesPerTile;  // 2048
 
         /// <summary>
-        /// Parses an SCR tilemap from raw bytes.
-        /// The caller provides widthTiles/heightTiles (32 or 64),
-        /// determined by ScrFileReader based on block count.
+        /// Parses an SCR file from raw bytes.
         /// </summary>
-        public static ScrFile Parse(byte[] data , int widthTiles , int heightTiles)
+        public static ScrFile Parse(byte[] data , int widthTiles , int heightTiles , int blockCount)
         {
-            // ScrFile now requires a constructor
-            var scr = new ScrFile(data, widthTiles, heightTiles);
+            var scr = new ScrFile(data, widthTiles, heightTiles, blockCount);
 
-            int totalBlocks = data.Length / BlockSizeBytes;
+            // --- Tilemap region ---
+            if ( blockCount == 1 )
+            {
+                ParseBlock( scr , data , 0 , 0 , 0 );
+            }
+            else if ( blockCount == 2 )
+            {
+                // Default: horizontal layout (64×32)
+                ParseBlock( scr , data , 0 , 0 , 0 );
+                ParseBlock( scr , data , 1 , 32 , 0 );
+            }
+            else if ( blockCount == 4 )
+            {
+                ParseBlock( scr , data , 0 , 0 , 0 );
+                ParseBlock( scr , data , 1 , 32 , 0 );
+                ParseBlock( scr , data , 2 , 0 , 32 );
+                ParseBlock( scr , data , 3 , 32 , 32 );
+            }
 
-            if ( totalBlocks == 1 )
-                ParseSingleBlock( scr , data );
-            else
-                ParseFourBlocks( scr , data );
+            // --- Footer (0x100 bytes) ---
+            int tilemapBytes = blockCount * BlockSizeBytes;
+            int footerOffset = tilemapBytes;
+            int footerSize   = 0x100;
+
+            scr.Footer = new byte[footerSize];
+            System.Buffer.BlockCopy( data , footerOffset , scr.Footer , 0 , footerSize );
+
+            // --- Visibility mask ---
+            int visibilityOffset = footerOffset + footerSize;
+            int totalTiles = widthTiles * heightTiles;
+            int visibilityBytes = blockCount * 0x80; // total visibility section size
+
+            // Read visibility as continuous bitstream across full screen
+            scr.Visibility = new bool[1][] { new bool[totalTiles] };
+
+            for ( int i = 0 ; i < totalTiles ; i++ )
+            {
+                int byteIndex = i >> 3;   // i / 8
+                int bitIndex  = i & 7;    // i % 8
+
+                if ( byteIndex >= visibilityBytes )
+                    break;
+
+                byte visByte = data[visibilityOffset + byteIndex];
+
+                // MSB-first bit order (bit 7 = tile 0)
+                bool visible = ((visByte >> (7 - bitIndex)) & 1) != 0;
+                scr.Visibility[0][i] = visible;
+
+                int gx = i % widthTiles;
+                int gy = i / widthTiles;
+
+                scr.Tiles[gy , gx].Visible = visible;
+            }
 
             return scr;
         }
 
-        /// <summary>
-        /// Debug switch between Little and Big Endian
-        /// </summary>
-        public static ScrEndian DebugEndianMode { get; set; } = ScrEndian.LittleEndian;
-
-
         // ─────────────────────────────────────────────────────────────
-        //  SINGLE BLOCK PARSER (32×32)
+        //  BLOCK PARSING
         // ─────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Parses a simple 32×32 SCR file (one block).
-        /// </summary>
-        private static void ParseSingleBlock(ScrFile scr , byte[] data)
+        private static void ParseBlock(ScrFile scr , byte[] data , int blockIndex , int baseX , int baseY)
         {
-            int offset = 0;
+            int blockOffset = blockIndex * BlockSizeBytes;
 
-            for ( int y = 0 ; y < BlockTileSize ; y++ )
+            for ( int i = 0 ; i < TilesPerBlock ; i++ )
             {
-                for ( int x = 0 ; x < BlockTileSize ; x++ )
-                {
-                    ushort raw = ReadWord(data, offset);
-                    offset += BytesPerTile;
+                int localX = i % BlockTileSize;
+                int localY = i / BlockTileSize;
 
-                    scr.Tiles[y , x] = DecodeTile( raw );
-                }
-            }
-        }
+                int globalX = baseX + localX;
+                int globalY = baseY + localY;
 
-        // ─────────────────────────────────────────────────────────────
-        //  FOUR BLOCK PARSER (64×64)
-        // ─────────────────────────────────────────────────────────────
+                ushort raw = ReadWord(data, blockOffset + (i * BytesPerTile));
+                var tile = DecodeTile(raw);
 
-        /// <summary>
-        /// Parses a full 64×64 SCR file composed of 4 blocks.
-        /// Blocks are arranged in a 2×2 grid as documented by RetroReversing:
-        ///
-        ///   0 | 1
-        ///   -----
-        ///   2 | 3
-        /// </summary>
-        private static void ParseFourBlocks(ScrFile scr , byte[] data)
-        {
-            for ( int block = 0 ; block < FullBlockCount ; block++ )
-            {
-                // Determine block position in the 2×2 grid
-                int blockX = (block % 2) * BlockTileSize;
-                int blockY = (block / 2) * BlockTileSize;
-
-                // Byte offset of this block in the SCR file
-                int blockOffset = block * BlockSizeBytes;
-
-                for ( int i = 0 ; i < TilesPerBlock ; i++ )
-                {
-                    int localX = i % BlockTileSize;
-                    int localY = i / BlockTileSize;
-
-                    int globalX = blockX + localX;
-                    int globalY = blockY + localY;
-
-                    int tileOffset = blockOffset + (i * BytesPerTile);
-
-                    ushort raw = ReadWord(data, tileOffset);
-                    scr.Tiles[globalY , globalX] = DecodeTile( raw );
-                }
+                scr.Tiles[globalY , globalX] = tile;
+                scr.Blocks[blockIndex].Tiles[localY , localX] = tile;
             }
         }
 
@@ -124,50 +109,27 @@ namespace SNESassetsWPF.Services
         // ─────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Reads a 16‑bit word from the byte array.
-        /// S‑CG‑CAD SCR files store tilemap entries big‑endian.
-        /// For debug reasons we can switch Endianess
+        /// Reads a 16‑bit word (little‑endian).
         /// </summary>
         private static ushort ReadWord(byte[] data , int offset)
         {
-            if ( DebugEndianMode == ScrEndian.BigEndian )
-            {
-                return (ushort)( ( data[offset] << 8 ) | data[offset + 1] );
-            }
-            else
-            {
-                return (ushort)( data[offset] | ( data[offset + 1] << 8 ) );
-            }
+            return (ushort)( data[offset] | ( data[offset + 1] << 8 ) );
         }
-
 
         /// <summary>
         /// Decodes a single SCR tile word into a ScrTile.
-        ///
-        /// According to RetroReversing's S‑CG‑CAD SCR specification:
-        ///
-        ///   FEDC BA98 7654 3210
-        ///   VHPP PTTT TTTT TTTT
-        ///
-        /// Bits:
-        ///   15     = VFlip
-        ///   14     = HFlip
-        ///   13     = Priority
-        ///   12‑10  = Palette group (0–7)
-        ///   9‑0    = Tile index (0–1023)
-        ///
-        /// This is the editor‑side S‑CG‑CAD tilemap format,
-        /// not generic SNES hardware tilemap rules.
         /// </summary>
         private static ScrTile DecodeTile(ushort raw)
         {
             return new ScrTile
             {
-                TileIndex = raw & 0x03FF ,          // bits 0–9
-                PaletteIndex = ( raw >> 10 ) & 0x07 ,    // bits 10–12
-                Priority = ( raw & 0x2000 ) != 0 ,   // bit 13
-                HFlip = ( raw & 0x4000 ) != 0 ,   // bit 14
-                VFlip = ( raw & 0x8000 ) != 0    // bit 15
+                Raw = raw ,
+                TileIndex = raw & 0x03FF ,
+                PaletteIndex = ( raw >> 10 ) & 0x07 ,
+                Priority = ( raw & 0x2000 ) != 0 ,
+                HFlip = ( raw & 0x4000 ) != 0 ,
+                VFlip = ( raw & 0x8000 ) != 0 ,
+                Visible = true // overridden by visibility mask
             };
         }
     }

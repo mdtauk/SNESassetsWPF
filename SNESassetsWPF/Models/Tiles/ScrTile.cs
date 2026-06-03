@@ -37,5 +37,10 @@
         /// Vertical flip flag.
         /// </summary>
         public bool VFlip { get; set; }
+
+        /// <summary>
+        /// Visibility flag.
+        /// </summary>
+        public bool Visible { get; set; }
     }
 }

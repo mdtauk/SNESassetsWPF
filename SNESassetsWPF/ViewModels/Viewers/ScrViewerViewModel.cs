@@ -6,10 +6,9 @@ using System.Diagnostics;
 using System.Windows.Media.Imaging;
 
 namespace SNESassetsWPF.ViewModels
-{   
+{
     public class ScrViewerViewModel : ViewModelBase
     {
-
         // ─────────────────────────────────────────────────────────────
         // SCR / CGX / COL references
         // ─────────────────────────────────────────────────────────────
@@ -23,9 +22,7 @@ namespace SNESassetsWPF.ViewModels
                 _scrFile = value;
                 OnPropertyChanged();
 
-                // Reset debug mode when a new SCR loads
                 SelectedDebugMode = ScrDebugMode.None;
-
                 RenderScr();
             }
         }
@@ -71,7 +68,7 @@ namespace SNESassetsWPF.ViewModels
         }
 
         // ─────────────────────────────────────────────────────────────
-        // Debug mode + options
+        // Debug mode
         // ─────────────────────────────────────────────────────────────
 
         private ScrDebugMode _selectedDebugMode = ScrDebugMode.TileIndex;
@@ -85,6 +82,7 @@ namespace SNESassetsWPF.ViewModels
                 RenderScr();
             }
         }
+
         public static ScrDebugMode[] DebugModes { get; } =
         {
             ScrDebugMode.None,
@@ -95,43 +93,10 @@ namespace SNESassetsWPF.ViewModels
         };
 
         // ─────────────────────────────────────────────────────────────
-        // SCR Endianness Toggle (THIS IS THE IMPORTANT PART)
-        // ─────────────────────────────────────────────────────────────
-
-        private bool _scrLittleEndian;
-        public bool ScrLittleEndian
-        {
-            get => _scrLittleEndian;
-            set
-            {
-                _scrLittleEndian = value;
-
-                // Update parser mode
-                ScrFileParser.DebugEndianMode =
-                    value ? ScrEndian.BigEndian : ScrEndian.LittleEndian;
-
-                OnPropertyChanged();
-
-                // Re-parse SCR file using new endian mode
-                if ( ScrFile?.RawBytes != null )
-                {
-                    ScrFile = ScrFileParser.Parse(
-                        ScrFile.RawBytes ,
-                        ScrFile.WidthTiles ,
-                        ScrFile.HeightTiles
-                    );
-                }
-
-                // NOW render the updated SCR
-                RenderScr();
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────
         // Zoom + Grid
         // ─────────────────────────────────────────────────────────────
 
-        private int _zoomLevel = 1; // 1x, 2x, 3x, 4x
+        private int _zoomLevel = 1;
         public int ZoomLevel
         {
             get => _zoomLevel;
@@ -147,14 +112,12 @@ namespace SNESassetsWPF.ViewModels
             }
         }
 
-        // Optional: if UI still uses 100/200/300/400
         public int ZoomPercent
         {
             get => _zoomLevel * 100;
             set
             {
-                int level = value / 100;
-                ZoomLevel = level;
+                ZoomLevel = value / 100;
                 OnPropertyChanged();
             }
         }
@@ -172,7 +135,6 @@ namespace SNESassetsWPF.ViewModels
                 RenderScr();
             }
         }
-
 
         // ─────────────────────────────────────────────────────────────
         // Bitmap + RenderResult
@@ -193,6 +155,22 @@ namespace SNESassetsWPF.ViewModels
         public RenderResult LastRenderResult => _lastRenderResult;
 
 
+        // ─────────────────────────────────────────────────────────────
+        // Visibility Toggle
+        // ─────────────────────────────────────────────────────────────
+
+        private bool _showInvisibleTiles = false;
+        public bool ShowInvisibleTiles
+        {
+            get => _showInvisibleTiles;
+            set
+            {
+                _showInvisibleTiles = value;
+                OnPropertyChanged();
+                RenderScr();
+            }
+        }
+
 
         // ─────────────────────────────────────────────────────────────
         // Constructor
@@ -203,7 +181,6 @@ namespace SNESassetsWPF.ViewModels
             SelectedDebugMode = ScrDebugMode.None;
         }
 
-
         // ─────────────────────────────────────────────────────────────
         // Rendering
         // ─────────────────────────────────────────────────────────────
@@ -213,7 +190,7 @@ namespace SNESassetsWPF.ViewModels
             if ( ScrFile == null )
                 return;
 
-            int zoomFactor = ZoomLevel;                 // ← FIXED
+            int zoomFactor = ZoomLevel;
             bool enableGrid = ShowGrid && zoomFactor >= 2;
 
             RenderResult result;
@@ -227,7 +204,8 @@ namespace SNESassetsWPF.ViewModels
                     ScrFile ,
                     SelectedDebugMode ,
                     zoomFactor ,
-                    enableGrid
+                    enableGrid ,
+                    ShowInvisibleTiles
                 );
             }
             else
@@ -239,17 +217,16 @@ namespace SNESassetsWPF.ViewModels
                     ScrFile,
                     CgxFile,
                     ColFile,
-                    enableGrid
-        );
+                    enableGrid,
+                    ShowInvisibleTiles
+                );
 
                 result = renderer.Render( zoomFactor );
             }
 
             _lastRenderResult = result;
-
             Bitmap = BitmapFactory.FromRenderResult( result );
         }
-
 
         // ─────────────────────────────────────────────────────────────
         // PNG Export
@@ -260,7 +237,7 @@ namespace SNESassetsWPF.ViewModels
             if ( ScrFile == null )
                 return;
 
-            int zoomFactor = ZoomLevel;   // ← FIXED
+            int zoomFactor = ZoomLevel;
 
             RenderResult result;
 
@@ -273,7 +250,8 @@ namespace SNESassetsWPF.ViewModels
                     ScrFile ,
                     SelectedDebugMode ,
                     zoomFactor ,
-                    showGrid: false
+                    showGrid: false ,
+                    ShowInvisibleTiles
                 );
             }
             else
@@ -282,17 +260,17 @@ namespace SNESassetsWPF.ViewModels
                     return;
 
                 var renderer = new ScrRenderer(
-            ScrFile,
-            CgxFile,
-            ColFile,
-            showGrid: false
-        );
+                    ScrFile,
+                    CgxFile,
+                    ColFile,
+                    showGrid: false,
+                    ShowInvisibleTiles
+                );
 
                 result = renderer.Render( zoomFactor );
             }
 
             BitmapFactory.SavePng( result , path );
         }
-
     }
 }

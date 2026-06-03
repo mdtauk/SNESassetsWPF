@@ -27,7 +27,7 @@
 
         /// <summary>
         /// Number of 32×32 blocks detected in the SCR file.
-        /// Typically 1 or 4 for S‑CAD SCR files.
+        /// Can be 1, 2, or 4 depending on layout (32×32, 64×32, 32×64, 64×64).
         /// </summary>
         public int BlockCount { get; set; }
 
@@ -45,6 +45,11 @@
         /// Error message if Success == false.
         /// </summary>
         public string ErrorMessage { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Number of visibility bytes (0x80 per block).
+        /// </summary>
+        public int VisibilityBytes { get; set; }
 
         public static ScrFileReadResult Fail(string msg)
             => new ScrFileReadResult { Success = false , ErrorMessage = msg };

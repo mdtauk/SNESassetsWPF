@@ -627,10 +627,10 @@
                                     SelectedItem="{Binding ScrViewer.SelectedDebugMode}" />
 
                                 <CheckBox
-                                    x:Name="chkSwitchDebugEndian"
+                                    x:Name="chkShowInvisible"
                                     Margin="8,0,16,0"
-                                    Content="Big endian"
-                                    IsChecked="{Binding ScrViewer.ScrLittleEndian, Mode=TwoWay}" />
+                                    Content="Show invisible tiles"
+                                    IsChecked="{Binding ScrViewer.ShowInvisibleTiles, Mode=TwoWay}" />
 
 
                                 <TextBlock

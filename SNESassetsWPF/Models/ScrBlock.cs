@@ -2,14 +2,12 @@
 {
     /// <summary>
     /// Represents one 32×32 tile block inside an S‑CG‑CAD SCR file.
-    /// SCR files contain exactly 4 blocks arranged in a 2×2 grid.
     /// Each block contains 1024 tile entries (16-bit words).
     /// </summary>
     public class ScrBlock
     {
         /// <summary>
-        /// Block index 0–3 in file order.
-        /// 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right.
+        /// Block index in file order.
         /// </summary>
         public int BlockIndex { get; }
 

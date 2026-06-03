@@ -16,7 +16,8 @@ namespace SNESassetsWPF.Rendering
             ScrFile scr ,
             ScrDebugMode mode ,
             int zoom = 1 ,
-            bool showGrid = false)
+            bool showGrid = false ,
+            bool showInvisibleTiles = false)
         {
             if ( scr == null )
                 throw new ArgumentNullException( nameof( scr ) );
@@ -44,11 +45,14 @@ namespace SNESassetsWPF.Rendering
                 {
                     ScrTile tile = scr.Tiles[ty, tx];
 
+                    // NEW: skip hidden tiles
+                    if ( !tile.Visible && !showInvisibleTiles )
+                        continue;
+
                     Color bg =
                         (mode == ScrDebugMode.TileIndex)
                         ? ScrDebugTileColors.GetColorForTileIndexMode(ty, tx)
                         : ScrDebugTileColors.GetColorForTile(tile);
-
 
                     Color[,] glyph = ScrDebugGlyphs.GetGlyphForMode(mode, tile);
 

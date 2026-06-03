@@ -10,16 +10,18 @@ namespace SNESassetsWPF.Rendering
         private readonly CgxFile _cgx;
         private readonly ColFile _col;
         private readonly bool _showGrid;
+        private readonly bool _showInvisibleTiles;
 
         private const int TileWidth  = 8;
         private const int TileHeight = 8;
 
-        public ScrRenderer(ScrFile scr , CgxFile cgx , ColFile col , bool showGrid)
+        public ScrRenderer(ScrFile scr , CgxFile cgx , ColFile col , bool showGrid , bool showInvisibleTiles)
         {
             _scr = scr;
             _cgx = cgx;
             _col = col;
             _showGrid = showGrid;
+            _showInvisibleTiles = showInvisibleTiles;
         }
 
         public RenderResult Render(int zoom)
@@ -47,6 +49,11 @@ namespace SNESassetsWPF.Rendering
                 {
                     var scrTile = _scr.Tiles[ty, tx];
 
+                    // NEW: skip hidden tiles
+                    if ( !scrTile.Visible && !_showInvisibleTiles )
+                        continue;
+
+                    // Validate tile index
                     if ( scrTile.TileIndex < 0 || scrTile.TileIndex >= _cgx.Tiles.Length )
                         continue;
 
@@ -66,7 +73,7 @@ namespace SNESassetsWPF.Rendering
                 }
             }
 
-            // Grid in the gaps (same as ScrDebugRenderer)
+            // Grid in the gaps
             if ( _showGrid && zoom >= 2 )
             {
                 byte R = 128, G = 128, B = 128, A = 255;
