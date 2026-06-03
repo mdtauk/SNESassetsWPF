@@ -571,13 +571,20 @@
                     <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="240" />
-                            <RowDefinition Height="auto" />
+                            <RowDefinition Height="4" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
+
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="4" />
+                            <ColumnDefinition Width="240" />
+                        </Grid.ColumnDefinitions>
 
                         <TreeView
                             x:Name="scrTreeView"
                             Grid.Row="0"
+                            Grid.Column="0"
                             Margin="0,0,0,0"
                             ItemsSource="{Binding ScrTree.RootItems}"
                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
@@ -599,54 +606,55 @@
                             </TreeView.Resources>
                         </TreeView>
 
+                        <GridSplitter Grid.Column="1" VerticalAlignment="Stretch" />
+
                         <Border
-                            Grid.Row="1"
-                            Padding="16,8,16,8"
+                            Grid.Row="0"
+                            Grid.Column="2"
+                            Padding="16,0,16,0"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
-                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="0,1,0,1">
+                            BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="1,0,0,0" Margin="0,8,0,8">
 
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel Margin="0,16,0,16" Orientation="Vertical">
 
                                 <TextBlock
                                     x:Name="scrDebugText"
-                                    Margin="0,0,16,0"
-                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,8"
+                                    HorizontalAlignment="Stretch"
                                     Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                     Style="{DynamicResource CaptionTextBlockStyle}"
                                     Text="Debug visuals"
-                                    TextAlignment="Right"
                                     Visibility="{Binding ScrViewer.IsDebugOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                                 <ComboBox
                                     x:Name="scrDebugSelector"
-                                    Width="180"
-                                    Margin="0,0,32,0"
+                                    Margin="0,0,0,16"
+                                    HorizontalAlignment="Stretch"
                                     ItemsSource="{Binding ScrViewer.DebugModes}"
                                     SelectedItem="{Binding ScrViewer.SelectedDebugMode}" />
 
                                 <CheckBox
                                     x:Name="chkShowInvisible"
-                                    Margin="8,0,16,0"
+                                    Margin="0,0,0,16"
+                                    HorizontalAlignment="Stretch"
                                     Content="Show invisible tiles"
                                     IsChecked="{Binding ScrViewer.ShowInvisibleTiles, Mode=TwoWay}" />
 
 
                                 <TextBlock
                                     x:Name="scrZoomText"
-                                    Margin="0,0,16,0"
+                                    Margin="0,0,0,8"
                                     VerticalAlignment="Center"
                                     Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                     Style="{DynamicResource CaptionTextBlockStyle}"
-                                    Text="SCR Zoom"
-                                    TextAlignment="Right" />
+                                    Text="SCR Zoom" />
 
                                 <ComboBox
                                     x:Name="scrZoomSelector"
-                                    Width="120"
-                                    Margin="0,0,0,0"
-                                    HorizontalAlignment="Left"
+                                    Margin="0,0,0,16"
+                                    HorizontalAlignment="Stretch"
                                     DataContext="{Binding ScrViewer}"
                                     SelectedValue="{Binding ZoomLevel, Mode=TwoWay}"
                                     SelectedValuePath="Tag">
@@ -662,9 +670,19 @@
 
                         </Border>
 
+                        <Border
+                            Grid.Row="1"
+                            Grid.ColumnSpan="3"
+                            Height="1"
+                            Margin="16,0,16,0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Bottom"
+                            Background="{StaticResource DividerStrokeColorDefaultBrush}" />
+
 
                         <ScrollViewer
                             Grid.Row="2"
+                            Grid.ColumnSpan="3"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             HorizontalScrollBarVisibility="Auto"
