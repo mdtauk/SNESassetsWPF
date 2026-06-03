@@ -1,7 +1,8 @@
 ﻿using SNESassetsWPF.Models;
+using SNESassetsWPF.Formats;
 using System;
 
-namespace SNESassetsWPF.Formats
+namespace SNESassetsWPF.Services
 {
     public class CgxFileParser
     {

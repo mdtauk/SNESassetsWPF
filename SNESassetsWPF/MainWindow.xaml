@@ -611,11 +611,12 @@
                         <Border
                             Grid.Row="0"
                             Grid.Column="2"
+                            Margin="0,8,0,8"
                             Padding="16,0,16,0"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
-                            BorderThickness="1,0,0,0" Margin="0,8,0,8">
+                            BorderThickness="1,0,0,0">
 
                             <StackPanel Margin="0,16,0,16" Orientation="Vertical">
 
@@ -677,7 +678,7 @@
                             Margin="16,0,16,0"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Bottom"
-                            Background="{StaticResource DividerStrokeColorDefaultBrush}" />
+                            Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
 
 
                         <ScrollViewer
@@ -712,7 +713,135 @@
                     BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8">
-                    <Grid />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="4" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="240" />
+                            <RowDefinition Height="4" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="auto" />
+                        </Grid.RowDefinitions>
+
+                        <TreeView
+                            x:Name="pnlTreeView"
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Margin="0,0,0,0"
+                            ItemsSource="{Binding PnlTree.RootItems}"
+                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            SelectedItemChanged="pnlTreeView_SelectedItemChanged">
+
+                            <TreeView.Resources>
+
+                                <!--  Folder template  -->
+                                <HierarchicalDataTemplate DataType="{x:Type models:FolderNode}" ItemsSource="{Binding Children}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </HierarchicalDataTemplate>
+
+                                <!--  File template  -->
+                                <DataTemplate DataType="{x:Type models:FileNode}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+
+                            </TreeView.Resources>
+                        </TreeView>
+
+
+                        <TreeView
+                            x:Name="mapTreeView"
+                            Grid.Row="0"
+                            Grid.Column="2"
+                            Margin="0,0,0,0"
+                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto">
+
+                            <TreeView.Resources>
+
+                                <!--  Folder template  -->
+                                <HierarchicalDataTemplate DataType="{x:Type models:FolderNode}" ItemsSource="{Binding Children}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </HierarchicalDataTemplate>
+
+                                <!--  File template  -->
+                                <DataTemplate DataType="{x:Type models:FileNode}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+
+                            </TreeView.Resources>
+                        </TreeView>
+
+
+                        <Border
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            Height="1"
+                            Margin="16,0,16,0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Bottom"
+                            Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+
+                        <Border
+                            Grid.RowSpan="2"
+                            Grid.Column="1"
+                            Height="1"
+                            Margin="16,0,16,0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Bottom"
+                            Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+
+
+                        <!--  PNL Viewer  -->
+
+                        <ScrollViewer
+                            Grid.Row="2"
+                            Grid.ColumnSpan="1"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                            <Image
+                                x:Name="pnlImage"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                helpers:DpiScaleHelper.Maintain100PercentScale="True"
+                                RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                Source="{Binding PnlViewer.Bitmap}"
+                                Stretch="None"
+                                UseLayoutRounding="True" />
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="3" Orientation="Horizontal">
+                            <ComboBox
+                                x:Name="pnlDebugSelector"
+                                Margin="16,8,16,8"
+                                HorizontalAlignment="Stretch"
+                                ItemsSource="{Binding PnlViewer.DebugModes}"
+                                SelectedItem="{Binding PnlViewer.SelectedDebugMode}" />
+
+                            <ComboBox
+                                x:Name="pnlZoomSelector"
+                                Margin="0,0,0,16"
+                                HorizontalAlignment="Stretch"
+                                DataContext="{Binding PnlViewer}"
+                                SelectedValue="{Binding ZoomLevel, Mode=TwoWay}"
+                                SelectedValuePath="Tag">
+
+                                <ComboBoxItem Content="100%" Tag="1" />
+                                <ComboBoxItem Content="200%" Tag="2" />
+                                <ComboBoxItem Content="300%" Tag="3" />
+                                <ComboBoxItem Content="400%" Tag="4" />
+
+                            </ComboBox>
+                        </StackPanel>
+
+                    </Grid>
                 </Border>
             </TabItem>
 

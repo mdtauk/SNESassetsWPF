@@ -22,6 +22,7 @@ namespace SNESassetsWPF.ViewModels
         public ColTreeViewModel ColTree { get; }
         public CgxTreeViewModel CgxTree { get; }
         public ScrTreeViewModel ScrTree { get; }
+        public PnlTreeViewModel PnlTree { get; }
 
 
         //
@@ -33,6 +34,8 @@ namespace SNESassetsWPF.ViewModels
         public PaletteViewModel Palette { get; } = new();
         public CgxViewerViewModel CgxViewer { get; } = new();
         public ScrViewerViewModel ScrViewer { get; } = new();
+        public PnlViewerViewModel PnlViewer { get; } = new();
+
 
 
         //
@@ -46,12 +49,17 @@ namespace SNESassetsWPF.ViewModels
         public RelayCommand<FileNode> LoadColCommand { get; private set; }
         public RelayCommand<FileNode> LoadCgxCommand { get; private set; }
         public RelayCommand<FileNode> LoadScrCommand { get; private set; }
+        public RelayCommand<FileNode> LoadPnlCommand { get; private set; }
+
+
 
         public RelayCommand ShowColHexCommand { get; private set; }
 
         // ⭐ NEW EXPORT COMMANDS
         public ICommand ExportCgxPngCommand { get; }
         public ICommand ExportScrPngCommand { get; }
+        public ICommand ExportPnlPngCommand { get; }
+
 
 
         //
@@ -63,6 +71,7 @@ namespace SNESassetsWPF.ViewModels
         public string LoadedCgxPath { get; private set; }
         public string LoadedColPath { get; private set; }
         public string LoadedScrPath { get; private set; }
+        public string LoadedPnlPath { get; private set; }
 
 
         //
@@ -94,6 +103,13 @@ namespace SNESassetsWPF.ViewModels
             //
             ScrTree = new ScrTreeViewModel();
 
+
+            //
+            // PNL TREE
+            //
+            PnlTree = new PnlTreeViewModel();
+
+
             //
             // COMMANDS
             //
@@ -102,6 +118,8 @@ namespace SNESassetsWPF.ViewModels
             LoadColCommand = new RelayCommand<FileNode>( LoadCol );
             LoadCgxCommand = new RelayCommand<FileNode>( LoadCgx );
             LoadScrCommand = new RelayCommand<FileNode>( LoadScr );
+            LoadPnlCommand = new RelayCommand<FileNode>( LoadPnl );
+
 
             ShowColHexCommand = new RelayCommand(
                 ShowColRawHex ,
@@ -109,10 +127,12 @@ namespace SNESassetsWPF.ViewModels
             );
 
             //
-            // NEW EXPORT COMMANDS
+            // PNG EXPORT COMMANDS
             //
             ExportCgxPngCommand = new RelayCommand( ExportCgxPng );
             ExportScrPngCommand = new RelayCommand( ExportScrPng );
+            ExportPnlPngCommand = new RelayCommand( ExportPnlPng );
+
 
         }
 
@@ -142,10 +162,11 @@ namespace SNESassetsWPF.ViewModels
             {
                 SelectedFolder = dlg.FolderName;
 
-                // Load all three trees
+                // Load all format trees
                 ColTree.LoadFolder( dlg.FolderName );
                 CgxTree.LoadFolder( dlg.FolderName );
                 ScrTree.LoadFolder( dlg.FolderName );
+                PnlTree.LoadFolder( dlg.FolderName );
             }
         }
 
@@ -222,6 +243,11 @@ namespace SNESassetsWPF.ViewModels
             // SCR viewer must also update
             //
             ScrViewer.ColFile = col;
+
+            //
+            // SCR viewer must also update
+            //
+            PnlViewer.ColFile = col;
         }
 
 
@@ -341,9 +367,14 @@ namespace SNESassetsWPF.ViewModels
                 CgxViewer.CgxFile = cgx;
 
                 //
-                // ⭐ SCR viewer must also update
+                // SCR viewer must also update
                 //
                 ScrViewer.CgxFile = cgx;
+
+                //
+                // PNL viewer must also update
+                //
+                PnlViewer.CgxFile = cgx;
             }
             catch ( Exception ex )
             {
@@ -352,12 +383,13 @@ namespace SNESassetsWPF.ViewModels
         }
 
 
+
+
         //
         // ─────────────────────────────────────────────────────────────
         //  SCR LOADING
         // ─────────────────────────────────────────────────────────────
         //
-
         private void LoadScr(FileNode fileNode)
         {
             if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
@@ -396,6 +428,54 @@ namespace SNESassetsWPF.ViewModels
         }
 
 
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PNL Loading
+        // ─────────────────────────────────────────────────────────────
+        //
+        private void LoadPnl(FileNode fileNode)
+        {
+            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
+                return;
+
+            Debug.WriteLine( $"LoadPnl called for: {fileNode.FullPath}" );
+
+            try
+            {
+                // PnlFileReader returns a PnlFileReadResult
+                var readResult = PnlFileReader.Load(fileNode.FullPath);
+
+                LoadedPnlPath = fileNode.FullPath;
+
+                if ( !readResult.Success )
+                {
+                    Debug.WriteLine( "PNL read error: " + readResult.ErrorMessage );
+                    return;
+                }
+
+                // Parsed PNL file
+                var pnl = readResult.Pnl;
+
+                // Send to viewer
+                PnlViewer.PnlFile = pnl;
+
+                // Also give it CGX + COL if already loaded
+                PnlViewer.CgxFile = CgxViewer.CgxFile;
+                PnlViewer.ColFile = CurrentCol;
+            }
+            catch ( Exception ex )
+            {
+                Debug.WriteLine( "LoadPnl exception: " + ex.Message );
+            }
+        }
+
+
+
+
+
+
         //
         // ─────────────────────────────────────────────────────────────
         //  PNG EXPORT HELPERS
@@ -403,14 +483,14 @@ namespace SNESassetsWPF.ViewModels
         //
 
         public static string BuildPngExportName(
-    string scrPath ,
-    string cgxPath ,
-    string colPath ,
-    int zoom ,
-    bool forceSingleRow = false ,
-    int selectedRow = -1 ,
-    ScrDebugMode debugMode = ScrDebugMode.None ,
-    bool isScrExport = false)
+            string scrPath ,
+            string cgxPath ,
+            string colPath ,
+            int zoom ,
+            bool forceSingleRow = false ,
+            int selectedRow = -1 ,
+            ScrDebugMode debugMode = ScrDebugMode.None ,
+            bool isScrExport = false)
         {
             string scr = System.IO.Path.GetFileNameWithoutExtension(scrPath) ?? "unknown_SCR";
             string cgx = System.IO.Path.GetFileNameWithoutExtension(cgxPath) ?? "unknown_CGX";
@@ -485,7 +565,6 @@ namespace SNESassetsWPF.ViewModels
         //  SCR PNG EXPORT
         // ─────────────────────────────────────────────────────────────
         //
-
         private void ExportScrPng()
         {
             if ( ScrViewer == null )
@@ -512,5 +591,31 @@ namespace SNESassetsWPF.ViewModels
             if ( dlg.ShowDialog() == true )
                 ScrViewer.SavePng( dlg.FileName );
         }
+
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PNL PNG EXPORT
+        // ─────────────────────────────────────────────────────────────
+        //
+        private void ExportPnlPng()
+        {
+            if ( PnlViewer == null )
+                return;
+
+            string exportName = $"PNL_{System.IO.Path.GetFileNameWithoutExtension(LoadedPnlPath)}_{PnlViewer.ZoomLevel}x.png";
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "PNG Image|*.png",
+                FileName = exportName
+            };
+
+            if ( dlg.ShowDialog() == true )
+                PnlViewer.SavePng( dlg.FileName );
+        }
+
     }
 }

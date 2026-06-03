@@ -1,5 +1,6 @@
 ﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
+using SNESassetsWPF.Services;
 using SNESassetsWPF.Rendering;
 using System;
 using System.ComponentModel;

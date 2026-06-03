@@ -38,6 +38,7 @@ namespace SNESassetsWPF
         private TreeViewController _colTree;
         private TreeViewController _cgxTree;
         private TreeViewController _scrTree;
+        private TreeViewController _pnlTree;
 
         private List<string> _savedColExpanded;
         private string _savedColSelected;
@@ -47,8 +48,8 @@ namespace SNESassetsWPF
         public ColTreeViewModel ColViewModel { get; }
         public CgxTreeViewModel CgxViewModel { get; }
         public ScrTreeViewModel ScrViewModel { get; }
+        public ScrTreeViewModel PnlViewModel { get; }
 
-        public CgxViewerViewModel CgxViewerViewModel { get; }
 
 
         public MainWindow()
@@ -58,6 +59,7 @@ namespace SNESassetsWPF
             _colTree = new TreeViewController( colTreeView );
             _cgxTree = new TreeViewController( cgxTreeView );
             _scrTree = new TreeViewController( scrTreeView );
+            _pnlTree = new TreeViewController( pnlTreeView );
 
             ViewModel = new MainViewModel();
             DataContext = ViewModel;
@@ -66,6 +68,7 @@ namespace SNESassetsWPF
             colTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
             cgxTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
             scrTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
+            pnlTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
         }
 
 
@@ -111,7 +114,7 @@ namespace SNESassetsWPF
 
 
         /// <summary>
-        /// Triggered when the user selects an item in the CGX TreeView.
+        /// Triggered when the user selects an item in the SCR TreeView.
         /// If the item is a SCR file, read and display its raw hex data.
         /// </summary>
         private void scrTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
@@ -126,12 +129,30 @@ namespace SNESassetsWPF
 
 
 
+        /// <summary>
+        /// Triggered when the user selects an item in the PNL TreeView.
+        /// If the item is a PNL file, read and display its raw hex data.
+        /// </summary>
+        private void pnlTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
+        {
+            if ( e.NewValue is FileNode fileNode )
+            {
+                var vm = (MainViewModel)DataContext;
+                vm.LoadPnlCommand.Execute( fileNode );
+            }
+        }
+
+
+
+
         private void ReloadAllTrees()
         {
             // 1. Save state for each tree
             _colTree.SaveState();
             _cgxTree.SaveState();
             _scrTree.SaveState();
+            _pnlTree.SaveState();
+
 
             // 2. Rebuild each tree using its own CurrentFolder
             if ( !string.IsNullOrEmpty( ColViewModel.CurrentFolder ) )
@@ -140,10 +161,12 @@ namespace SNESassetsWPF
             if ( !string.IsNullOrEmpty( CgxViewModel.CurrentFolder ) )
                 CgxViewModel.LoadFolder( CgxViewModel.CurrentFolder );
 
+
             // 3. Restore state for each tree
             _colTree.RestoreState();
             _cgxTree.RestoreState();
             _scrTree.RestoreState();
+            _pnlTree.RestoreState();
         }
 
 
@@ -182,10 +205,12 @@ namespace SNESassetsWPF
                 _colTree.State.TryPendingExpandRestore( _colTree.SavedExpanded );
                 _colTree.State.TryPendingRestore( _colTree.SavedSelected );
                 _scrTree.State.TryPendingRestore( _scrTree.SavedSelected );
+                _pnlTree.State.TryPendingRestore( _pnlTree.SavedSelected );
 
                 _cgxTree.State.TryPendingExpandRestore( _cgxTree.SavedExpanded );
                 _cgxTree.State.TryPendingRestore( _cgxTree.SavedSelected );
                 _scrTree.State.TryPendingRestore( _scrTree.SavedSelected );
+                _pnlTree.State.TryPendingRestore( _pnlTree.SavedSelected );
             }
         }
 

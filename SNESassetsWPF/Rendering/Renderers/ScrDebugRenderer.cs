@@ -51,8 +51,8 @@ namespace SNESassetsWPF.Rendering
 
                     Color bg =
                         (mode == ScrDebugMode.TileIndex)
-                        ? ScrDebugTileColors.GetColorForTileIndexMode(ty, tx)
-                        : ScrDebugTileColors.GetColorForTile(tile);
+                        ? DebugColors.GetColorForScrTileIndexMode(ty, tx)
+                        : DebugColors.GetColorForScrTile(tile);
 
                     Color[,] glyph = ScrDebugGlyphs.GetGlyphForMode(mode, tile);
 
