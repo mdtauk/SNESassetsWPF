@@ -3,58 +3,74 @@ using SNESassetsWPF.Models;
 
 namespace SNESassetsWPF.Formats
 {
-    /// <summary>
-    /// Represents a full PNL file as used by S‑CG‑CAD.
-    /// Contains the header, the 32×512 tile attribute table,
-    /// the tile flag table, and computed metadata such as
-    /// meta‑tile width and height.
-    /// </summary>
     public class PnlFile
     {
-        /// <summary>
-        /// Raw 0x100‑byte header block.
-        /// Must be preserved exactly when saving.
-        /// </summary>
         public byte[] Header { get; set; }
-
-        /// <summary>
-        /// The full 32×512 grid of tile entries.
-        /// Each entry corresponds to one attribute word and one flag word.
-        /// </summary>
         public PnlTile[,] Tiles { get; set; }
 
-        /// <summary>
-        /// Meta‑tile width in tiles, computed from header[0x69].
-        /// metaWidth = 1 << (header[0x69] & 0x1F)
-        /// </summary>
         public int MetaWidth { get; set; }
-
-        /// <summary>
-        /// Meta‑tile height in tiles, computed from header[0x6A].
-        /// metaHeight = 1 << (header[0x6A] & 0x1F)
-        /// </summary>
         public int MetaHeight { get; set; }
 
-        /// <summary>
-        /// True if the Mode 7 UI flag is set (header[0x61] != 0).
-        /// This is an editor‑side toggle and does not affect tile data.
-        /// </summary>
         public bool Mode7Enabled { get; set; }
 
-        /// <summary>
-        /// Optional: extracted patterns for convenience.
-        /// These are computed from the tile grid and meta‑tile size.
-        /// </summary>
         public List<PnlPattern> Patterns { get; set; } = new List<PnlPattern>();
 
-        /// <summary>
-        /// Width of the PNL panel in tiles (always 32).
-        /// </summary>
         public const int PanelWidth = 32;
+        public const int PanelHeight = 512;
+
+        public int MetaTileCount => ( PanelWidth * PanelHeight ) / ( MetaWidth * MetaHeight );
 
         /// <summary>
-        /// Height of the PNL panel in tiles (always 512).
+        /// Meta-tiles extracted from the PNL panel.
+        /// Each meta-tile is a 2D array of PnlTile.
         /// </summary>
-        public const int PanelHeight = 512;
+        public PnlTile[][,] MetaTiles { get; set; }
+
+        // ─────────────────────────────────────────────────────────────
+        // ADD THIS METHOD
+        // ─────────────────────────────────────────────────────────────
+        public void BuildMetaTiles()
+        {
+            int mw = MetaWidth;
+            int mh = MetaHeight;
+
+            int tilesX = PanelWidth  / mw;
+            int tilesY = PanelHeight / mh;
+
+            MetaTiles = new PnlTile[tilesX * tilesY][,];
+
+            int index = 0;
+
+            for ( int ty = 0 ; ty < tilesY ; ty++ )
+            {
+                for ( int tx = 0 ; tx < tilesX ; tx++ )
+                {
+                    var meta = new PnlTile[mw, mh];
+
+                    for ( int y = 0 ; y < mh ; y++ )
+                    {
+                        for ( int x = 0 ; x < mw ; x++ )
+                        {
+                            meta[x , y] = Tiles[tx * mw + x , ty * mh + y];
+                        }
+                    }
+
+                    MetaTiles[index++] = meta;
+                }
+            }
+        }
+
+
+        public PnlTile GetTile(int x , int y)
+        {
+            if ( x < 0 || x >= PanelWidth )
+                return null;
+
+            if ( y < 0 || y >= PanelHeight )
+                return null;
+
+            return Tiles[x , y];
+        }
+
     }
 }

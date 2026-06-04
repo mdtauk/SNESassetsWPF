@@ -28,6 +28,19 @@
         public byte[,] Pixels { get; set; } = new byte[8 , 8];
 
         /// <summary>
+        /// Returns a byte index
+        /// </summary>
+        /// <param name="y"></param>
+        /// <param name="x"></param>
+        /// <returns></returns>
+        public byte this[int y , int x]
+        {
+            get => Pixels[y , x];
+            set => Pixels[y , x] = value;
+        }
+
+
+        /// <summary>
         /// Editor-side palette group from prefix table (0–15).
         /// </summary>
         public int PaletteGroup { get; set; }

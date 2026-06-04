@@ -24,6 +24,8 @@ namespace SNESassetsWPF.ViewModels
         public ScrTreeViewModel ScrTree { get; }
         public PnlTreeViewModel PnlTree { get; }
 
+        public MapTreeViewModel MapTree { get; }
+
 
         //
         // ─────────────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ namespace SNESassetsWPF.ViewModels
         public PaletteViewModel Palette { get; } = new();
         public CgxViewerViewModel CgxViewer { get; } = new();
         public ScrViewerViewModel ScrViewer { get; } = new();
-        public PnlViewerViewModel PnlViewer { get; } = new();
+        public MapPnlViewerViewModel MapPnlViewer { get; } = new();
 
 
 
@@ -50,6 +52,7 @@ namespace SNESassetsWPF.ViewModels
         public RelayCommand<FileNode> LoadCgxCommand { get; private set; }
         public RelayCommand<FileNode> LoadScrCommand { get; private set; }
         public RelayCommand<FileNode> LoadPnlCommand { get; private set; }
+        public RelayCommand<FileNode> LoadMapCommand { get; private set; }
 
 
 
@@ -58,7 +61,7 @@ namespace SNESassetsWPF.ViewModels
         // ⭐ NEW EXPORT COMMANDS
         public ICommand ExportCgxPngCommand { get; }
         public ICommand ExportScrPngCommand { get; }
-        public ICommand ExportPnlPngCommand { get; }
+        public ICommand ExportMapPnlPngCommand { get; }
 
 
 
@@ -72,6 +75,7 @@ namespace SNESassetsWPF.ViewModels
         public string LoadedColPath { get; private set; }
         public string LoadedScrPath { get; private set; }
         public string LoadedPnlPath { get; private set; }
+        public string LoadedMapPath { get; private set; }
 
 
         //
@@ -109,6 +113,11 @@ namespace SNESassetsWPF.ViewModels
             //
             PnlTree = new PnlTreeViewModel();
 
+            ///
+            // PNL TREE
+            //
+            MapTree = new MapTreeViewModel();
+
 
             //
             // COMMANDS
@@ -119,6 +128,7 @@ namespace SNESassetsWPF.ViewModels
             LoadCgxCommand = new RelayCommand<FileNode>( LoadCgx );
             LoadScrCommand = new RelayCommand<FileNode>( LoadScr );
             LoadPnlCommand = new RelayCommand<FileNode>( LoadPnl );
+            LoadMapCommand = new RelayCommand<FileNode>( LoadMap );
 
 
             ShowColHexCommand = new RelayCommand(
@@ -131,7 +141,7 @@ namespace SNESassetsWPF.ViewModels
             //
             ExportCgxPngCommand = new RelayCommand( ExportCgxPng );
             ExportScrPngCommand = new RelayCommand( ExportScrPng );
-            ExportPnlPngCommand = new RelayCommand( ExportPnlPng );
+            ExportMapPnlPngCommand = new RelayCommand( ExportMapPnlPng );
 
 
         }
@@ -167,6 +177,7 @@ namespace SNESassetsWPF.ViewModels
                 CgxTree.LoadFolder( dlg.FolderName );
                 ScrTree.LoadFolder( dlg.FolderName );
                 PnlTree.LoadFolder( dlg.FolderName );
+                MapTree.LoadFolder( dlg.FolderName );
             }
         }
 
@@ -247,7 +258,7 @@ namespace SNESassetsWPF.ViewModels
             //
             // SCR viewer must also update
             //
-            PnlViewer.ColFile = col;
+            MapPnlViewer.ColFile = col;
         }
 
 
@@ -374,7 +385,8 @@ namespace SNESassetsWPF.ViewModels
                 //
                 // PNL viewer must also update
                 //
-                PnlViewer.CgxFile = cgx;
+                MapPnlViewer.CgxFile = cgx;
+
             }
             catch ( Exception ex )
             {
@@ -459,17 +471,58 @@ namespace SNESassetsWPF.ViewModels
                 var pnl = readResult.Pnl;
 
                 // Send to viewer
-                PnlViewer.PnlFile = pnl;
+                MapPnlViewer.PnlFile = pnl;
 
                 // Also give it CGX + COL if already loaded
-                PnlViewer.CgxFile = CgxViewer.CgxFile;
-                PnlViewer.ColFile = CurrentCol;
+                MapPnlViewer.CgxFile = CgxViewer.CgxFile;
+                MapPnlViewer.ColFile = CurrentCol;
             }
             catch ( Exception ex )
             {
                 Debug.WriteLine( "LoadPnl exception: " + ex.Message );
             }
         }
+
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  MAP Loading
+        // ─────────────────────────────────────────────────────────────
+        //
+        private void LoadMap(FileNode fileNode)
+        {
+            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
+                return;
+
+            Debug.WriteLine( $"LoadMap called for: {fileNode.FullPath}" );
+
+            try
+            {
+                // IMPORTANT: pass the loaded PNL to the MAP reader
+                var readResult = MapFileReader.Load(fileNode.FullPath);
+
+                if ( !readResult.Success )
+                {
+                    Debug.WriteLine( "MAP read error: " + readResult.ErrorMessage );
+                    return;
+                }
+
+                var map = readResult.Map;
+
+                MapPnlViewer.MapFile = map;
+
+                // Also give it CGX + COL if already loaded
+                MapPnlViewer.CgxFile = CgxViewer.CgxFile;
+                MapPnlViewer.ColFile = CurrentCol;
+            }
+            catch ( Exception ex )
+            {
+                Debug.WriteLine( "LoadMap exception: " + ex.Message );
+            }
+        }
+
 
 
 
@@ -597,15 +650,15 @@ namespace SNESassetsWPF.ViewModels
 
         //
         // ─────────────────────────────────────────────────────────────
-        //  PNL PNG EXPORT
+        //  MAP PNL PNG EXPORT
         // ─────────────────────────────────────────────────────────────
         //
-        private void ExportPnlPng()
+        private void ExportMapPnlPng()
         {
-            if ( PnlViewer == null )
+            if ( MapPnlViewer == null )
                 return;
 
-            string exportName = $"PNL_{System.IO.Path.GetFileNameWithoutExtension(LoadedPnlPath)}_{PnlViewer.ZoomLevel}x.png";
+            string exportName = $"PNL_{System.IO.Path.GetFileNameWithoutExtension(LoadedPnlPath)}_MAP_{System.IO.Path.GetFileNameWithoutExtension(LoadedMapPath)}_{MapPnlViewer.ZoomLevel}x.png";
 
             var dlg = new Microsoft.Win32.SaveFileDialog
             {
@@ -614,7 +667,7 @@ namespace SNESassetsWPF.ViewModels
             };
 
             if ( dlg.ShowDialog() == true )
-                PnlViewer.SavePng( dlg.FileName );
+                MapPnlViewer.SavePng( dlg.FileName );
         }
 
     }

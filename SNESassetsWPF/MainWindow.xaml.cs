@@ -39,6 +39,7 @@ namespace SNESassetsWPF
         private TreeViewController _cgxTree;
         private TreeViewController _scrTree;
         private TreeViewController _pnlTree;
+        private TreeViewController _mapTree;
 
         private List<string> _savedColExpanded;
         private string _savedColSelected;
@@ -49,6 +50,7 @@ namespace SNESassetsWPF
         public CgxTreeViewModel CgxViewModel { get; }
         public ScrTreeViewModel ScrViewModel { get; }
         public ScrTreeViewModel PnlViewModel { get; }
+        public ScrTreeViewModel MapViewModel { get; }
 
 
 
@@ -60,6 +62,7 @@ namespace SNESassetsWPF
             _cgxTree = new TreeViewController( cgxTreeView );
             _scrTree = new TreeViewController( scrTreeView );
             _pnlTree = new TreeViewController( pnlTreeView );
+            _mapTree = new TreeViewController( mapTreeView );
 
             ViewModel = new MainViewModel();
             DataContext = ViewModel;
@@ -69,6 +72,7 @@ namespace SNESassetsWPF
             cgxTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
             scrTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
             pnlTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
+            mapTreeView.ItemContainerGenerator.StatusChanged += OnTreeContainersGenerated;
         }
 
 
@@ -83,7 +87,7 @@ namespace SNESassetsWPF
 
         /// <summary>
         /// Triggered when the user selects an item in the COL TreeView.
-        /// If the item is a COL file, read and display its raw hex data.
+        /// If the item is a COL file, read and optionally display its raw hex data.
         /// </summary>
         private void colTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
         {
@@ -99,7 +103,7 @@ namespace SNESassetsWPF
 
         /// <summary>
         /// Triggered when the user selects an item in the CGX TreeView.
-        /// If the item is a CGX file, read and display its raw hex data.
+        /// If the item is a CGX file.
         /// </summary>
         private void cgxTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
         {
@@ -115,7 +119,7 @@ namespace SNESassetsWPF
 
         /// <summary>
         /// Triggered when the user selects an item in the SCR TreeView.
-        /// If the item is a SCR file, read and display its raw hex data.
+        /// If the item is a SCR file.
         /// </summary>
         private void scrTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
         {
@@ -131,7 +135,7 @@ namespace SNESassetsWPF
 
         /// <summary>
         /// Triggered when the user selects an item in the PNL TreeView.
-        /// If the item is a PNL file, read and display its raw hex data.
+        /// If the item is a PNL file.
         /// </summary>
         private void pnlTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
         {
@@ -145,6 +149,22 @@ namespace SNESassetsWPF
 
 
 
+        /// <summary>
+        /// Triggered when the user selects an item in the MAP TreeView.
+        /// If the item is a MAP file.
+        /// </summary>
+        private void mapTreeView_SelectedItemChanged(object sender , RoutedPropertyChangedEventArgs<object> e)
+        {
+            if ( e.NewValue is FileNode fileNode )
+            {
+                var vm = (MainViewModel)DataContext;
+                vm.LoadMapCommand.Execute( fileNode );
+            }
+        }
+
+
+
+
         private void ReloadAllTrees()
         {
             // 1. Save state for each tree
@@ -152,6 +172,7 @@ namespace SNESassetsWPF
             _cgxTree.SaveState();
             _scrTree.SaveState();
             _pnlTree.SaveState();
+            _mapTree.SaveState();
 
 
             // 2. Rebuild each tree using its own CurrentFolder
@@ -167,6 +188,7 @@ namespace SNESassetsWPF
             _cgxTree.RestoreState();
             _scrTree.RestoreState();
             _pnlTree.RestoreState();
+            _mapTree.RestoreState();
         }
 
 
