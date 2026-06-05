@@ -59,5 +59,20 @@
         /// Editor-side priority flag (if prefix encodes it).
         /// </summary>
         public int Priority { get; set; }
+
+
+        /// <summary>
+        /// Pixel accessor for renderers.
+        /// Returns the decoded palette index at (x,y).
+        /// </summary>
+        public byte GetPixel(int x , int y)
+        {
+            // Optional safety bounds
+            if ( x < 0 || x >= 8 || y < 0 || y >= 8 )
+                return 0;
+
+            return Pixels[y , x];
+        }
+
     }
 }

@@ -1,87 +1,87 @@
 ﻿using System;
-using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 
-namespace SNESassetsWPF.Services
+namespace SNESassetsWPF.Formats
 {
-    /// <summary>
-    /// Parses raw PNL file bytes into a structured PnlFile model.
-    /// This class performs all decoding of header fields, tile attributes,
-    /// tile flags, and computed metadata such as meta‑tile size.
-    /// </summary>
-    public static class PnlFileParser
+    public class PnlFileParser
     {
         /// <summary>
-        /// Parses a PNL file from raw byte data.
+        /// Parses raw PNL bytes into a PnlFile object.
         /// </summary>
-        public static PnlFileReadResult Parse(byte[] data)
+        public PnlFile Parse(byte[] data)
         {
-            try
+            if ( data == null || data.Length < 0x100 + 0x8000 + 0x8000 )
+                throw new ArgumentException( "Invalid PNL data." );
+
+            var pnl = new PnlFile();
+
+            // ---------------------------------------------------------
+            // 1. Copy header
+            // ---------------------------------------------------------
+            Buffer.BlockCopy( data , 0 , pnl.Header , 0 , 0x100 );
+
+            // ---------------------------------------------------------
+            // 2. Decode header fields
+            // ---------------------------------------------------------
+            pnl.IsMode7Enabled = ( pnl.Header[0x61] & 0x80 ) != 0;
+
+            pnl.MetaWidth = 1 << ( pnl.Header[0x69] & 0x1F );
+            pnl.MetaHeight = 1 << ( pnl.Header[0x6A] & 0x1F );
+
+            // ---------------------------------------------------------
+            // 3. Tile table + flag table offsets
+            // ---------------------------------------------------------
+            int tileTableOffset = 0x100;
+            int flagTableOffset = tileTableOffset + 0x8000;
+
+            // ---------------------------------------------------------
+            // 4. Parse all 16384 tiles
+            // ---------------------------------------------------------
+            for ( int i = 0 ; i < pnl.PnlTiles.Length ; i++ )
             {
-                if ( data == null || data.Length < 0x10100 )
-                    return PnlFileReadResult.Fail( "PNL file is too small to be valid." );
+                var tile = new PnlTile();
 
-                var pnl = new PnlFile
-                {
-                    Header = new byte[0x100],
-                    Tiles = new PnlTile[PnlFile.PanelWidth, PnlFile.PanelHeight]
-                };
+                // -----------------------------
+                // Read raw attribute word (big endian)
+                // -----------------------------
+                ushort rawAttr = (ushort)(
+                    (data[tileTableOffset + i * 2] << 8) |
+                     data[tileTableOffset + i * 2 + 1]
+                );
 
-                // Copy header
-                Buffer.BlockCopy( data , 0 , pnl.Header , 0 , 0x100 );
+                tile.RawAttributeWord = rawAttr;
 
-                // Compute meta‑tile size from header
-                pnl.MetaWidth = 1 << ( pnl.Header[0x69] & 0x1F );
-                pnl.MetaHeight = 1 << ( pnl.Header[0x6A] & 0x1F );
+                // -----------------------------
+                // Decode attribute bits
+                // -----------------------------
+                tile.TileId = rawAttr & 0x03FF;          // bits 0–9
+                tile.PaletteRow = ( rawAttr >> 10 ) & 0x07;    // bits 10–12
+                tile.Priority = ( rawAttr & 0x2000 ) != 0;   // bit 13
+                tile.HFlip = ( rawAttr & 0x4000 ) != 0;   // bit 14
+                tile.VFlip = ( rawAttr & 0x8000 ) != 0;   // bit 15
 
-                // Mode 7 UI flag
-                pnl.Mode7Enabled = pnl.Header[0x61] != 0;
+                // -----------------------------
+                // Read raw flag word (big endian)
+                // -----------------------------
+                ushort rawFlag = (ushort)(
+                    (data[flagTableOffset + i * 2] << 8) |
+                     data[flagTableOffset + i * 2 + 1]
+                );
 
-                // Offsets for the two 0x4000‑word tables
-                int attrOffset = 0x100;
-                int flagOffset = attrOffset + 0x8000;
+                tile.RawFlagWord = rawFlag;
 
-                int index = 0;
+                // -----------------------------
+                // Decode present flag
+                // -----------------------------
+                tile.IsPresent = ( rawFlag & 0x8000 ) != 0;
 
-                // Parse 32×512 = 16384 tiles
-                for ( int y = 0 ; y < PnlFile.PanelHeight ; y++ )
-                {
-                    for ( int x = 0 ; x < PnlFile.PanelWidth ; x++ )
-                    {
-                        // Attribute word (big‑endian)
-                        ushort attr = (ushort)((data[attrOffset + index] << 8) |
-                                                data[attrOffset + index + 1]);
-
-                        // Flag word (big‑endian)
-                        ushort flag = (ushort)((data[flagOffset + index] << 8) |
-                                               data[flagOffset + index + 1]);
-
-                        index += 2;
-
-                        var tile = new PnlTile
-                        {
-                            RawAttributeWord = attr,
-                            RawFlagWord = flag,
-
-                            TileId = attr & 0x03FF,
-                            PaletteRow = (attr >> 10) & 0x07,
-                            Priority = ((attr >> 13) & 0x01) != 0,
-                            HFlip = ((attr >> 14) & 0x01) != 0,
-                            VFlip = ((attr >> 15) & 0x01) != 0,
-
-                            Present = ((flag >> 15) & 0x01) != 0
-                        };
-
-                        pnl.Tiles[x , y] = tile;
-                    }
-                }
-
-                return PnlFileReadResult.Ok( pnl );
+                // -----------------------------
+                // Store tile
+                // -----------------------------
+                pnl.PnlTiles[i] = tile;
             }
-            catch ( Exception ex )
-            {
-                return PnlFileReadResult.Fail( "Exception while parsing PNL: " + ex.Message );
-            }
+
+            return pnl;
         }
     }
 }

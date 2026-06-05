@@ -61,7 +61,8 @@ namespace SNESassetsWPF.ViewModels
         // ⭐ NEW EXPORT COMMANDS
         public ICommand ExportCgxPngCommand { get; }
         public ICommand ExportScrPngCommand { get; }
-        public ICommand ExportMapPnlPngCommand { get; }
+        public ICommand ExportPnlPngCommand { get; }
+        public ICommand ExportMapPngCommand { get; }
 
 
 
@@ -141,7 +142,8 @@ namespace SNESassetsWPF.ViewModels
             //
             ExportCgxPngCommand = new RelayCommand( ExportCgxPng );
             ExportScrPngCommand = new RelayCommand( ExportScrPng );
-            ExportMapPnlPngCommand = new RelayCommand( ExportMapPnlPng );
+            ExportPnlPngCommand = new RelayCommand( ExportPnlPng );
+            ExportMapPngCommand = new RelayCommand( ExportMapPng );
 
 
         }
@@ -215,51 +217,27 @@ namespace SNESassetsWPF.ViewModels
 
         private void LoadCol(FileNode fileNode)
         {
-            if ( fileNode == null )
-                return;
+            if ( fileNode == null ) return;
 
-            Debug.WriteLine( $"LoadCol called for: {fileNode.FullPath}" );
-
-            int previousRow = Palette.ForceSingleRow ? Palette.SelectedPaletteRowIndex : -1;
-
-            // Read raw COL file
             var reader = new ColFileReader();
             var raw = reader.Read(fileNode.FullPath);
 
             LoadedColPath = fileNode.FullPath;
 
-            // Parse COL
             var parser = new ColFileParser();
             var col = parser.Parse(raw);
 
             CurrentCol = col;
 
-            // Update palette UI
             LoadPaletteIntoViewModel( col );
 
-            // Restore selected row if needed
-            if ( Palette.ForceSingleRow &&
-                previousRow >= 0 &&
-                previousRow < Palette.PaletteRows.Count )
-            {
-                Palette.SelectedPaletteRowIndex = previousRow;
-            }
-
-            //
-            // CGX viewer
-            //
+            // Update CGX + SCR viewers
             CgxViewer.ColFile = col;
-
-            //
-            // SCR viewer must also update
-            //
             ScrViewer.ColFile = col;
 
-            //
-            // SCR viewer must also update
-            //
-            MapPnlViewer.ColFile = col;
+            MapPnlViewer.CurrentCol = col;
         }
+
 
 
         private void LoadPaletteIntoViewModel(ColFile col)
@@ -351,48 +329,24 @@ namespace SNESassetsWPF.ViewModels
 
         private void LoadCgx(FileNode fileNode)
         {
-            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
-                return;
+            if ( fileNode == null ) return;
 
-            Debug.WriteLine( $"LoadCgx called for: {fileNode.FullPath}" );
+            var reader = new CgxFileReader();
+            var readResult = reader.Read(fileNode.FullPath);
 
-            try
-            {
-                var reader = new CgxFileReader();
-                var readResult = reader.Read(fileNode.FullPath);
+            LoadedCgxPath = fileNode.FullPath;
 
-                LoadedCgxPath = fileNode.FullPath;
+            var parser = new CgxFileParser();
+            var cgx = parser.Parse(readResult);
 
-                if ( !readResult.IsValid )
-                {
-                    Debug.WriteLine( "CGX read error: " + readResult.ErrorMessage );
-                    return;
-                }
+            Debug.WriteLine( $"CGX BPP = {cgx.BitDepth}, tiles = {cgx.Tiles.Length}" );
 
-                var parser = new CgxFileParser();
-                var cgx = parser.Parse(readResult);
+            CgxViewer.CgxFile = cgx;
+            ScrViewer.CgxFile = cgx;
 
-                //
-                // CGX viewer
-                //
-                CgxViewer.CgxFile = cgx;
-
-                //
-                // SCR viewer must also update
-                //
-                ScrViewer.CgxFile = cgx;
-
-                //
-                // PNL viewer must also update
-                //
-                MapPnlViewer.CgxFile = cgx;
-
-            }
-            catch ( Exception ex )
-            {
-                Debug.WriteLine( "LoadCgx exception: " + ex.Message );
-            }
+            MapPnlViewer.CurrentCgx = cgx;
         }
+
 
 
 
@@ -447,41 +401,60 @@ namespace SNESassetsWPF.ViewModels
         //  PNL Loading
         // ─────────────────────────────────────────────────────────────
         //
-        private void LoadPnl(FileNode fileNode)
+        private PnlFile _currentPnl;
+        public PnlFile CurrentPnl
         {
-            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
-                return;
-
-            Debug.WriteLine( $"LoadPnl called for: {fileNode.FullPath}" );
-
-            try
+            get => _currentPnl;
+            set
             {
-                // PnlFileReader returns a PnlFileReadResult
-                var readResult = PnlFileReader.Load(fileNode.FullPath);
-
-                LoadedPnlPath = fileNode.FullPath;
-
-                if ( !readResult.Success )
-                {
-                    Debug.WriteLine( "PNL read error: " + readResult.ErrorMessage );
-                    return;
-                }
-
-                // Parsed PNL file
-                var pnl = readResult.Pnl;
-
-                // Send to viewer
-                MapPnlViewer.PnlFile = pnl;
-
-                // Also give it CGX + COL if already loaded
-                MapPnlViewer.CgxFile = CgxViewer.CgxFile;
-                MapPnlViewer.ColFile = CurrentCol;
-            }
-            catch ( Exception ex )
-            {
-                Debug.WriteLine( "LoadPnl exception: " + ex.Message );
+                _currentPnl = value;
+                OnPropertyChanged();
+                OnPropertyChanged( nameof( HasPnl ) );
             }
         }
+
+        public bool HasPnl => CurrentPnl != null;
+
+
+
+
+        private void LoadPnl(FileNode fileNode)
+        {
+            if ( fileNode == null )
+                return;
+
+            // 1. Read raw bytes
+            var reader = new PnlFileReader();
+            var readResult = reader.Read(fileNode.FullPath);
+
+            LoadedPnlPath = fileNode.FullPath;
+
+            if ( !readResult.Success )
+            {
+                Debug.WriteLine( "PNL read error: " + readResult.ErrorMessage );
+                return;
+            }
+
+
+            // 2. Parse raw bytes into a PnlFile
+            var parser = new PnlFileParser();
+            var pnl = parser.Parse(readResult.Data);
+
+
+            // 3. Store parsed PNL
+            CurrentPnl = pnl;
+
+            MapPnlViewer.CurrentPnl = pnl;
+
+
+            // 4. Verification
+            PnlVerify.DumpSummary( pnl );
+
+            if ( CurrentMap != null && pnl != null )
+                MapVerify.DumpSummary( CurrentMap , pnl );
+
+        }
+
 
 
 
@@ -491,37 +464,68 @@ namespace SNESassetsWPF.ViewModels
         //  MAP Loading
         // ─────────────────────────────────────────────────────────────
         //
-        private void LoadMap(FileNode fileNode)
+        private MapFile _currentMap;
+        public MapFile CurrentMap
         {
-            if ( fileNode == null || string.IsNullOrWhiteSpace( fileNode.FullPath ) )
-                return;
-
-            Debug.WriteLine( $"LoadMap called for: {fileNode.FullPath}" );
-
-            try
+            get => _currentMap;
+            set
             {
-                // IMPORTANT: pass the loaded PNL to the MAP reader
-                var readResult = MapFileReader.Load(fileNode.FullPath);
-
-                if ( !readResult.Success )
-                {
-                    Debug.WriteLine( "MAP read error: " + readResult.ErrorMessage );
-                    return;
-                }
-
-                var map = readResult.Map;
-
-                MapPnlViewer.MapFile = map;
-
-                // Also give it CGX + COL if already loaded
-                MapPnlViewer.CgxFile = CgxViewer.CgxFile;
-                MapPnlViewer.ColFile = CurrentCol;
-            }
-            catch ( Exception ex )
-            {
-                Debug.WriteLine( "LoadMap exception: " + ex.Message );
+                _currentMap = value;
+                OnPropertyChanged();
+                OnPropertyChanged( nameof( HasMap ) );
             }
         }
+
+        public bool HasMap => CurrentMap != null;
+
+
+
+
+        private void LoadMap(FileNode fileNode)
+        {
+            if ( fileNode == null )
+                return;
+
+            // 1. Read raw MAP bytes
+            var readResult = MapFileReader.Load(fileNode.FullPath);
+            LoadedMapPath = fileNode.FullPath;
+
+            if ( !readResult.Success )
+            {
+                Debug.WriteLine( "MAP read error: " + readResult.ErrorMessage );
+                return;
+            }
+
+            // 2. Parse MAP using MapParser
+            readResult = MapParser.Parse( readResult , CurrentPnl );
+
+            if ( !readResult.Success )
+            {
+                Debug.WriteLine( "MAP parse error: " + readResult.ErrorMessage );
+                return;
+            }
+
+            // 3. Extract parsed MapFile
+            var map = readResult.Map;
+
+            if ( map == null )
+            {
+                Debug.WriteLine( "MAP parser returned NULL" );
+                return;
+            }
+
+            // 4. Store MAP
+            CurrentMap = map; 
+            
+            MapPnlViewer.CurrentMap = map;
+
+
+            // 5. Verification
+            MapVerify.DumpSummary( map , CurrentPnl );
+        }
+
+
+
 
 
 
@@ -653,7 +657,7 @@ namespace SNESassetsWPF.ViewModels
         //  MAP PNL PNG EXPORT
         // ─────────────────────────────────────────────────────────────
         //
-        private void ExportMapPnlPng()
+        private void ExportMapPng()
         {
             if ( MapPnlViewer == null )
                 return;
@@ -667,7 +671,26 @@ namespace SNESassetsWPF.ViewModels
             };
 
             if ( dlg.ShowDialog() == true )
-                MapPnlViewer.SavePng( dlg.FileName );
+                MapPnlViewer.SaveMapPng( dlg.FileName );
+        }
+
+
+
+        private void ExportPnlPng()
+        {
+            if ( MapPnlViewer == null )
+                return;
+
+            string exportName = $"PNL_{System.IO.Path.GetFileNameWithoutExtension(LoadedPnlPath)}_{MapPnlViewer.ZoomLevel}x.png";
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "PNG Image|*.png",
+                FileName = exportName
+            };
+
+            if ( dlg.ShowDialog() == true )
+                MapPnlViewer.SaveMapPng( dlg.FileName );
         }
 
     }

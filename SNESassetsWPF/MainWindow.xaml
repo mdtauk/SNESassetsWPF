@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:enums="clr-namespace:SNESassetsWPF.Enums"
     xmlns:helpers="clr-namespace:SNESassetsWPF.Helpers"
     xmlns:local="clr-namespace:SNESassetsWPF"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -250,6 +251,11 @@
                     Header="Export SCR to PNG" />
 
             </MenuItem>
+
+            <MenuItem
+                x:Name="menuTest"
+                Click="menuTest_Click"
+                Header="Test" />
 
         </Menu>
 
@@ -802,7 +808,7 @@
 
                         <ScrollViewer
                             Grid.Row="2"
-                            Grid.ColumnSpan="3"
+                            Grid.Column="0"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             HorizontalScrollBarVisibility="Auto"
@@ -813,33 +819,44 @@
                                 VerticalAlignment="Center"
                                 helpers:DpiScaleHelper.Maintain100PercentScale="True"
                                 RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                Source="{Binding MapPnlViewer.Bitmap}"
+                                Source="{Binding MapPnlViewer.PnlBitmap}"
                                 Stretch="None"
                                 UseLayoutRounding="True" />
                         </ScrollViewer>
 
-                        <!--  Switch view  -->
-                        <ComboBox
-                            x:Name="pnlSwitchSelector"
-                            Grid.Row="3"
-                            Grid.Column="0"
-                            Margin="12,8,12,8"
+
+
+                        <!--  MAP Viewer  -->
+
+                        <ScrollViewer
+                            Grid.Row="2"
+                            Grid.Column="2"
                             HorizontalAlignment="Stretch"
-                            VerticalAlignment="Center"
-                            DisplayMemberPath="DisplayName"
-                            ItemsSource="{Binding MapPnlViewer.AvailableModes}"
-                            SelectedValue="{Binding MapPnlViewer.RenderMode, Mode=TwoWay}"
-                            SelectedValuePath="Mode">
+                            VerticalAlignment="Stretch"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                            <Image
+                                x:Name="mapImage"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                helpers:DpiScaleHelper.Maintain100PercentScale="True"
+                                RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                Stretch="None"
+                                UseLayoutRounding="True" />
+                        </ScrollViewer>
 
-                            <ComboBox.ItemContainerStyle>
-                                <Style TargetType="ComboBoxItem">
-                                    <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
-                                </Style>
-                            </ComboBox.ItemContainerStyle>
-                        </ComboBox>
 
 
 
+                        <!--  Show debug  -->
+
+                        <CheckBox
+                            x:Name="chkShowPnlMapDebug"
+                            Grid.Row="3"
+                            Margin="12,0,12,0"
+                            HorizontalAlignment="Stretch"
+                            Content="Show debug overlay"
+                            IsChecked="{Binding ShowDebugOverlay, Mode=TwoWay}" />
 
                         <!--  Zoom  -->
 
@@ -852,8 +869,6 @@
                             <TextBlock
                                 Margin="0,0,0,0"
                                 VerticalAlignment="Center"
-                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                                Style="{DynamicResource CaptionTextBlockStyle}"
                                 Text="MAP/PNL Zoom"
                                 TextAlignment="Right" />
 

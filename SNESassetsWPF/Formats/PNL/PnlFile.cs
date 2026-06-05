@@ -1,76 +1,66 @@
-﻿using System.Collections.Generic;
-using SNESassetsWPF.Models;
+﻿using SNESassetsWPF.Models;
+using System.Windows.Media.Media3D;
 
 namespace SNESassetsWPF.Formats
 {
     public class PnlFile
     {
+        /// <summary>
+        /// Raw header bytes from the PNL file.
+        /// Contains width/height exponents, mode flags, etc.
+        /// </summary>
         public byte[] Header { get; set; }
-        public PnlTile[,] Tiles { get; set; }
 
+
+        /// <summary>
+        /// True if Mode 7 flag is set in the PNL header.
+        /// header[0x61]
+        /// </summary>
+        public bool IsMode7Enabled { get; set; }
+
+
+        /// <summary>
+        /// Meta Width of a single PnlTile, multiples of CgxTiles.
+        /// 1 << (header[0x69] & 0x1F)
+        /// </summary>
         public int MetaWidth { get; set; }
+
+
+        /// <summary>
+        /// Meta Height of a single PnlTile, multiples of CgxTiles.
+        /// 1 << (header[0x6A] & 0x1F)
+        /// </summary>
         public int MetaHeight { get; set; }
 
-        public bool Mode7Enabled { get; set; }
 
-        public List<PnlPattern> Patterns { get; set; } = new List<PnlPattern>();
+        /// <summary>
+        /// Flat array of PNL tiles (PanelWidth × PanelHeight).
+        /// Each tile stores references to Cgx Tiles.
+        /// </summary>
+        public PnlTile[] PnlTiles { get; set; }
 
+
+
+
+        /// <summary>
+        /// Constants used for Renderin PNLs.
+        /// </summary>
         public const int PanelWidth = 32;
         public const int PanelHeight = 512;
 
-        public int MetaTileCount => ( PanelWidth * PanelHeight ) / ( MetaWidth * MetaHeight );
+
+
+
 
         /// <summary>
-        /// Meta-tiles extracted from the PNL panel.
-        /// Each meta-tile is a 2D array of PnlTile.
+        /// A Pnl File created as we Parse a PNL file
         /// </summary>
-        public PnlTile[][,] MetaTiles { get; set; }
-
-        // ─────────────────────────────────────────────────────────────
-        // ADD THIS METHOD
-        // ─────────────────────────────────────────────────────────────
-        public void BuildMetaTiles()
+        public PnlFile()
         {
-            int mw = MetaWidth;
-            int mh = MetaHeight;
+            PnlTiles = new PnlTile[PanelWidth * PanelHeight];
 
-            int tilesX = PanelWidth  / mw;
-            int tilesY = PanelHeight / mh;
-
-            MetaTiles = new PnlTile[tilesX * tilesY][,];
-
-            int index = 0;
-
-            for ( int ty = 0 ; ty < tilesY ; ty++ )
-            {
-                for ( int tx = 0 ; tx < tilesX ; tx++ )
-                {
-                    var meta = new PnlTile[mw, mh];
-
-                    for ( int y = 0 ; y < mh ; y++ )
-                    {
-                        for ( int x = 0 ; x < mw ; x++ )
-                        {
-                            meta[x , y] = Tiles[tx * mw + x , ty * mh + y];
-                        }
-                    }
-
-                    MetaTiles[index++] = meta;
-                }
-            }
+            // Allocate header to correct size (0x100)
+            Header = new byte[0x100];
         }
-
-
-        public PnlTile GetTile(int x , int y)
-        {
-            if ( x < 0 || x >= PanelWidth )
-                return null;
-
-            if ( y < 0 || y >= PanelHeight )
-                return null;
-
-            return Tiles[x , y];
-        }
-
     }
 }

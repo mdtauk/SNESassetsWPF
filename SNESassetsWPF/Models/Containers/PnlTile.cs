@@ -2,8 +2,7 @@
 {
     /// <summary>
     /// Represents a single tile entry inside a PNL panel.
-    /// This corresponds to one 16‑bit attribute word and one 16‑bit flag word
-    /// from the PNL file's two tile tables.
+    /// This corresponds to one 16‑bit attribute word and one 16‑bit flag word.
     /// </summary>
     public class PnlTile
     {
@@ -34,19 +33,19 @@
 
         /// <summary>
         /// True if the tile is present/active. Extracted from bit 15 of the flag word.
-        /// If false, the tile slot is considered empty.
         /// </summary>
-        public bool Present { get; set; }
+        public bool IsPresent { get; set; }
 
         /// <summary>
-        /// The raw 16‑bit attribute word (big‑endian on disk).
-        /// Useful for round‑tripping and debugging.
+        /// The raw 16‑bit attribute word exactly as stored in the PNL file.
+        /// This contains the tile ID, palette row, priority, and flip bits.
+        /// Preserved for round‑tripping and debugging.
         /// </summary>
         public ushort RawAttributeWord { get; set; }
 
         /// <summary>
-        /// The raw 16‑bit flag word (big‑endian on disk).
-        /// Only bit 15 is used by S‑CG‑CAD; lower bits should be preserved.
+        /// The raw 16‑bit flag word exactly as stored in the PNL file.
+        /// Only bit 15 (present flag) is used by S‑CG‑CAD; all other bits must be preserved.
         /// </summary>
         public ushort RawFlagWord { get; set; }
     }

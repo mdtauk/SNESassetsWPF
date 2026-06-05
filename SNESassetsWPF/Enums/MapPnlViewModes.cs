@@ -6,10 +6,9 @@ namespace SNESassetsWPF.Enums
 {
     public enum MapPnlViewModes
     {
-        Auto,       // Default: choose based on loaded files
         PnlDebug,   // PNL debug rectangles
+        PnlFull,    // Future: PNL full render using CGX + COL
         MapDebug,   // MAP debug rectangles
-        MapFull,    // MAP + PNL + CGX + COL
-        PnlFull     // Future: PNL full render using CGX + COL
+        MapFull     // MAP + PNL + CGX + COL
     }
 }
