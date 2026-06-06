@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
-using SNESassetsWPF.Formats;
+﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
+using System.Diagnostics;
 
 namespace SNESassetsWPF.Services
 {
@@ -17,50 +17,53 @@ namespace SNESassetsWPF.Services
                 return;
             }
 
-            Debug.WriteLine( $"Panel size: {PnlFile.PanelWidth} × {PnlFile.PanelHeight}" );
-            Debug.WriteLine( $"Total tiles: {pnl.PnlTiles.Length}" );
+            Debug.WriteLine( $"Total tiles: {pnl.Tiles.Length} (expected 16384)" );
+            Debug.WriteLine( $"Panel layout: 32 × {pnl.Tiles.Length / 32}" );
+            Debug.WriteLine( $"Palette block (ColHalf): {pnl.ColHalf}" );
+            Debug.WriteLine( $"Palette cell  (ColCell): {pnl.ColCell}" );
+            Debug.WriteLine( "" );
 
-            Debug.WriteLine( $"Meta tile size: {pnl.MetaWidth} × {pnl.MetaHeight}" );
-            Debug.WriteLine( $"Mode 7 enabled: {pnl.IsMode7Enabled}" );
+            int visible = 0;
+            int hidden = 0;
 
-            int present = 0;
-            int empty = 0;
-
-            foreach ( var tile in pnl.PnlTiles )
+            foreach ( var t in pnl.Tiles )
             {
-                if ( tile == null )
-                    continue;
-
-                if ( tile.IsPresent )
-                    present++;
-                else
-                    empty++;
+                if ( t.IsVisible ) visible++;
+                else hidden++;
             }
 
-            Debug.WriteLine( $"Present tiles: {present}" );
-            Debug.WriteLine( $"Empty tiles:   {empty}" );
+            Debug.WriteLine( $"Visible tiles:   {visible}" );
+            Debug.WriteLine( $"Hidden tiles:    {hidden}" );
+            Debug.WriteLine( "" );
 
             DumpFirstTiles( pnl );
         }
 
-        private static void DumpFirstTiles(PnlFile pnl)
+        private static void DumpFirstTiles(PnlFile pnl , int count = 16)
         {
-            Debug.WriteLine( "First few PNL tiles:" );
+            Debug.WriteLine( "First PNL tiles:" );
+            Debug.WriteLine( "----------------" );
 
-            for ( int i = 0 ; i < 10 ; i++ )
+            int max = pnl.Tiles.Length < count ? pnl.Tiles.Length : count;
+
+            for ( int i = 0 ; i < max ; i++ )
             {
-                if ( i >= pnl.PnlTiles.Length )
-                    break;
+                var t = pnl.Tiles[i];
 
-                var t = pnl.PnlTiles[i];
-                if ( t == null )
-                    continue;
+                int x = i % 32;
+                int y = i / 32;
 
                 Debug.WriteLine(
-                    $"  [{i}] rawAttr=0x{t.RawAttributeWord:X4} rawFlag=0x{t.RawFlagWord:X4} " +
-                    $"CGX={t.TileId} pal={t.PaletteRow} H={t.HFlip} V={t.VFlip} P={t.Priority} present={t.IsPresent}"
+                    $"Tile[{i}] at ({x},{y})  " +
+                    $"vis={( t.IsVisible ? "Y" : "N" )}  " +
+                    $"idx={t.TileIndex}  " +
+                    $"pal={t.PaletteRow}  " +
+                    $"H={t.HFlip}  V={t.VFlip}  " +
+                    $"raw=0x{t.RawAttributeWord:X4}"
                 );
             }
+
+            Debug.WriteLine( "--------------------------------------------" );
         }
     }
 }

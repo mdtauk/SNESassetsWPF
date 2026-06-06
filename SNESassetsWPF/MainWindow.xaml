@@ -252,6 +252,29 @@
 
             </MenuItem>
 
+            <MenuItem Header="MAP + PNL Tools">
+
+                <MenuItem
+                    x:Name="menuShowMapPnlGrid"
+                    DataContext="{Binding MapPnlViewer}"
+                    Header="Show MAP + PNL Grid"
+                    IsCheckable="True"
+                    IsChecked="{Binding ShowGrid}"
+                    IsEnabled="{Binding IsGridToggleEnabled}" />
+
+                <MenuItem
+                    x:Name="menuExportPNLtoPNG"
+                    Command="{Binding ExportPnlPngCommand}"
+                    Header="Export PNL to PNG" />
+
+
+                <MenuItem
+                    x:Name="menuExportMAPtoPNG"
+                    Command="{Binding ExportMapngCommand}"
+                    Header="Export MAP to PNG" />
+
+            </MenuItem>
+
             <MenuItem
                 x:Name="menuTest"
                 Click="menuTest_Click"
@@ -813,15 +836,23 @@
                             VerticalAlignment="Stretch"
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto">
-                            <Image
-                                x:Name="pnlImage"
+                            <Border
+                                Margin="8,8,8,8"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                helpers:DpiScaleHelper.Maintain100PercentScale="True"
-                                RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                Source="{Binding MapPnlViewer.PnlBitmap}"
-                                Stretch="None"
-                                UseLayoutRounding="True" />
+                                BorderBrush="#80808080"
+                                BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                                <Image
+                                    x:Name="pnlImage"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    helpers:DpiScaleHelper.Maintain100PercentScale="True"
+                                    RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                    Source="{Binding MapPnlViewer.PnlBitmap}"
+                                    Stretch="None"
+                                    UseLayoutRounding="True" />
+                            </Border>
                         </ScrollViewer>
 
 
@@ -856,7 +887,7 @@
                             Margin="12,0,12,0"
                             HorizontalAlignment="Stretch"
                             Content="Show debug overlay"
-                            IsChecked="{Binding ShowDebugOverlay, Mode=TwoWay}" />
+                            IsChecked="{Binding MapPnlViewer.ShowDebugOverlay, Mode=TwoWay}" />
 
                         <!--  Zoom  -->
 

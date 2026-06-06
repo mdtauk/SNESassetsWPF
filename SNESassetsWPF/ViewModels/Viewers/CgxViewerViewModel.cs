@@ -101,11 +101,11 @@ namespace SNESassetsWPF.ViewModels
         }
 
         private WriteableBitmap _spacer;
-public WriteableBitmap Spacer
-{
-    get => _spacer;
-    private set { _spacer = value; OnPropertyChanged(); }
-}
+        public WriteableBitmap Spacer
+        {
+            get => _spacer;
+            private set { _spacer = value; OnPropertyChanged(); }
+        }
 
 
 

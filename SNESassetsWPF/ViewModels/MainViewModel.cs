@@ -450,9 +450,6 @@ namespace SNESassetsWPF.ViewModels
             // 4. Verification
             PnlVerify.DumpSummary( pnl );
 
-            if ( CurrentMap != null && pnl != null )
-                MapVerify.DumpSummary( CurrentMap , pnl );
-
         }
 
 
@@ -483,45 +480,6 @@ namespace SNESassetsWPF.ViewModels
 
         private void LoadMap(FileNode fileNode)
         {
-            if ( fileNode == null )
-                return;
-
-            // 1. Read raw MAP bytes
-            var readResult = MapFileReader.Load(fileNode.FullPath);
-            LoadedMapPath = fileNode.FullPath;
-
-            if ( !readResult.Success )
-            {
-                Debug.WriteLine( "MAP read error: " + readResult.ErrorMessage );
-                return;
-            }
-
-            // 2. Parse MAP using MapParser
-            readResult = MapParser.Parse( readResult , CurrentPnl );
-
-            if ( !readResult.Success )
-            {
-                Debug.WriteLine( "MAP parse error: " + readResult.ErrorMessage );
-                return;
-            }
-
-            // 3. Extract parsed MapFile
-            var map = readResult.Map;
-
-            if ( map == null )
-            {
-                Debug.WriteLine( "MAP parser returned NULL" );
-                return;
-            }
-
-            // 4. Store MAP
-            CurrentMap = map; 
-            
-            MapPnlViewer.CurrentMap = map;
-
-
-            // 5. Verification
-            MapVerify.DumpSummary( map , CurrentPnl );
         }
 
 

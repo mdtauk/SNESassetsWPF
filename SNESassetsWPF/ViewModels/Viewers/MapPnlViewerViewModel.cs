@@ -17,6 +17,11 @@ public class MapPnlViewerViewModel : ViewModelBase
     private WriteableBitmap _pnlBitmap;
     private WriteableBitmap _mapBitmap;
 
+    private bool _showGrid = false;
+
+
+
+
     public PnlFile CurrentPnl
     {
         get => _pnl;
@@ -73,18 +78,6 @@ public class MapPnlViewerViewModel : ViewModelBase
         }
     }
 
-
-    public int ZoomLevel
-    {
-        get => _zoomLevel;
-        set
-        {
-            _zoomLevel = value < 1 ? 1 : value;
-            OnPropertyChanged();
-            RenderAll();
-        }
-    }
-
     public WriteableBitmap PnlBitmap
     {
         get => _pnlBitmap;
@@ -123,7 +116,17 @@ public class MapPnlViewerViewModel : ViewModelBase
         System.Diagnostics.Debug.WriteLine( "RenderPnl: starting" );
 
         var renderer = new PnlRenderer();
-        var result = renderer.Render(_pnl, _cgx, _col, ZoomLevel, ShowDebugOverlay);
+
+        var result = renderer.Render(
+            _pnl,
+            _cgx,
+            _col,
+            zoom: ZoomLevel,
+            forceVisible: false,
+            showGrid: ShowGrid,
+            debugMode: ShowDebugOverlay,
+            debugTint: ShowDebugOverlay
+        );
 
         System.Diagnostics.Debug.WriteLine( $"RenderPnl: result = {result.Width}x{result.Height}" );
 
@@ -131,6 +134,7 @@ public class MapPnlViewerViewModel : ViewModelBase
 
         System.Diagnostics.Debug.WriteLine( "RenderPnl: bitmap assigned" );
     }
+
 
 
     private void RenderMap()
@@ -150,6 +154,47 @@ public class MapPnlViewerViewModel : ViewModelBase
         //MapBitmap = BitmapFactory.FromRenderResult( result );
     }
 
+
+
+
+
+    // ---------------------------------------
+    // GRID & ZOOM
+    // ---------------------------------------
+    public int ZoomLevel
+    {
+        get => _zoomLevel;
+        set
+        {
+            _zoomLevel = value < 1 ? 1 : value;
+            OnPropertyChanged();
+            RenderAll();
+
+            // Grid toggle only enabled at zoom >= 2
+            OnPropertyChanged( nameof( IsGridToggleEnabled ) );
+
+            // Auto-disable grid at 100%
+            if ( _zoomLevel == 1 )
+                ShowGrid = false;
+        }
+    }
+
+
+    public bool ShowGrid
+    {
+        get => _showGrid;
+        set
+        {
+            if ( _showGrid != value )
+            {
+                _showGrid = value;
+                OnPropertyChanged();
+                RenderPnl();
+            }
+        }
+    }
+
+    public bool IsGridToggleEnabled => ZoomLevel >= 2;
 
 
 

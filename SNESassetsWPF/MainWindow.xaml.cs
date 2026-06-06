@@ -83,6 +83,27 @@ namespace SNESassetsWPF
         }
 
 
+        /// <summary>
+        /// Run Dbug on demand
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void menuTest_Click(object sender , RoutedEventArgs e)
+        {
+            var vm = (MainViewModel)DataContext;
+
+            if ( vm?.CurrentPnl == null )
+            {
+                Debug.WriteLine( "No PNL loaded." );
+                return;
+            }
+
+            for ( int i = 0 ; i < 10 ; i++ )
+                DebugPrintPnlTile( vm.CurrentPnl , i );
+        }
+
+
+
 
 
         /// <summary>
@@ -265,61 +286,49 @@ namespace SNESassetsWPF
 
         private void DebugPrintPnlTile(PnlFile pnl , int pnlIndex)
         {
-            int metaW = pnl.MetaWidth;
-            int metaH = pnl.MetaHeight;
+            if ( pnl == null )
+            {
+                Debug.WriteLine( "PNL is null." );
+                return;
+            }
 
-            if ( pnlIndex < 0 || pnlIndex >= pnl.PnlTiles.Length )
+            if ( pnlIndex < 0 || pnlIndex >= pnl.Tiles.Length )
             {
                 Debug.WriteLine( $"PNL[{pnlIndex}] is out of range" );
                 return;
             }
 
-            var tile = pnl.PnlTiles[pnlIndex];
+            var tile = pnl.Tiles[pnlIndex];
             if ( tile == null )
             {
                 Debug.WriteLine( $"PNL[{pnlIndex}] = null" );
                 return;
             }
 
-            Debug.WriteLine( $"PNL[{pnlIndex}]" );
-            Debug.WriteLine( $"  TileId      = {tile.TileId}" );
-            Debug.WriteLine( $"  MetaWidth   = {metaW}" );
-            Debug.WriteLine( $"  MetaHeight  = {metaH}" );
-            Debug.WriteLine( $"  PaletteRow  = {tile.PaletteRow}" );
-            Debug.WriteLine( $"  HFlip       = {tile.HFlip}" );
-            Debug.WriteLine( $"  VFlip       = {tile.VFlip}" );
-            Debug.WriteLine( $"  Present     = {tile.IsPresent}" );
+            int x = pnlIndex % 32;
+            int y = pnlIndex / 32;
+
+            Debug.WriteLine( $"PNL[{pnlIndex}] at ({x},{y})" );
+            Debug.WriteLine( "--------------------------------------------" );
+
+            Debug.WriteLine( $"  RawAttributeWord = 0x{tile.RawAttributeWord:X4}" );
+            Debug.WriteLine( $"  IsVisible        = {tile.IsVisible}" );
             Debug.WriteLine( "" );
 
-            Debug.WriteLine( "  CGX tiles inside this PnlTile:" );
+            Debug.WriteLine( $"  TileIndex        = {tile.TileIndex}" );
+            Debug.WriteLine( $"  PaletteRow       = {tile.PaletteRow}" );
+            Debug.WriteLine( $"  HFlip            = {tile.HFlip}" );
+            Debug.WriteLine( $"  VFlip            = {tile.VFlip}" );
+            Debug.WriteLine( "" );
 
-            const int CgxSheetWidth = 16; // SNES CGX sheet width
+            // CGX sheet coordinates (16 tiles per row)
+            const int CgxSheetWidth = 16;
+            int sheetX = tile.TileIndex % CgxSheetWidth;
+            int sheetY = tile.TileIndex / CgxSheetWidth;
 
-            for ( int my = 0 ; my < metaH ; my++ )
-            {
-                for ( int mx = 0 ; mx < metaW ; mx++ )
-                {
-                    int cgxIndex = tile.TileId + my * CgxSheetWidth + mx;
-
-                    int sheetX = cgxIndex % CgxSheetWidth;
-                    int sheetY = cgxIndex / CgxSheetWidth;
-
-                    Debug.WriteLine(
-                        $"    ({mx},{my}) → CGX {cgxIndex}  (sheet pos {sheetX},{sheetY})"
-                    );
-                }
-            }
-
+            Debug.WriteLine( $"  CGX Sheet Pos    = ({sheetX},{sheetY})" );
             Debug.WriteLine( "--------------------------------------------" );
         }
 
-        private void menuTest_Click(object sender , RoutedEventArgs e)
-        {
-            var vm = (MainViewModel)DataContext;
-
-            for ( int i = 0 ; i < 10 ; i++ )
-                DebugPrintPnlTile( vm.CurrentPnl , i );
-
-        }
     }
 }
