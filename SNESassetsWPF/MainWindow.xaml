@@ -872,6 +872,7 @@
                                 VerticalAlignment="Center"
                                 helpers:DpiScaleHelper.Maintain100PercentScale="True"
                                 RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                Source="{Binding MapPnlViewer.MapBitmap}"
                                 Stretch="None"
                                 UseLayoutRounding="True" />
                         </ScrollViewer>

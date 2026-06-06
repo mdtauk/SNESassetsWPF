@@ -1,7 +1,6 @@
 ﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Rendering;
 using SNESassetsWPF.ViewModels;
-using System.Windows.Forms;
 using System.Windows.Media.Imaging;
 
 public class MapPnlViewerViewModel : ViewModelBase
@@ -11,16 +10,16 @@ public class MapPnlViewerViewModel : ViewModelBase
     private CgxFile _cgx;
     private ColFile _col;
 
-    private bool _debugOverlayEnabled;
     private int _zoomLevel = 1;
+    private bool _showDebugOverlay;
+    private bool _showGrid;
 
     private WriteableBitmap _pnlBitmap;
     private WriteableBitmap _mapBitmap;
 
-    private bool _showGrid = false;
-
-
-
+    // -------------------------------------------------------
+    // PUBLIC PROPERTIES
+    // -------------------------------------------------------
 
     public PnlFile CurrentPnl
     {
@@ -66,7 +65,6 @@ public class MapPnlViewerViewModel : ViewModelBase
         }
     }
 
-    private bool _showDebugOverlay;
     public bool ShowDebugOverlay
     {
         get => _showDebugOverlay;
@@ -74,7 +72,39 @@ public class MapPnlViewerViewModel : ViewModelBase
         {
             _showDebugOverlay = value;
             OnPropertyChanged();
-            RenderPnl();   // re-render when toggled
+            RenderAll();
+        }
+    }
+
+    public bool ShowGrid
+    {
+        get => _showGrid;
+        set
+        {
+            if ( _showGrid != value )
+            {
+                _showGrid = value;
+                OnPropertyChanged();
+                RenderAll();
+            }
+        }
+    }
+
+    public bool IsGridToggleEnabled => ZoomLevel >= 2;
+
+    public int ZoomLevel
+    {
+        get => _zoomLevel;
+        set
+        {
+            _zoomLevel = value < 1 ? 1 : value;
+            OnPropertyChanged();
+            RenderAll();
+
+            OnPropertyChanged( nameof( IsGridToggleEnabled ) );
+
+            if ( _zoomLevel == 1 )
+                ShowGrid = false;
         }
     }
 
@@ -98,6 +128,10 @@ public class MapPnlViewerViewModel : ViewModelBase
         }
     }
 
+    // -------------------------------------------------------
+    // RENDERING
+    // -------------------------------------------------------
+
     private void RenderAll()
     {
         RenderPnl();
@@ -108,19 +142,16 @@ public class MapPnlViewerViewModel : ViewModelBase
     {
         if ( _pnl == null || _cgx == null || _col == null )
         {
-            System.Diagnostics.Debug.WriteLine( "RenderPnl: missing dependency" );
             PnlBitmap = null;
             return;
         }
 
-        System.Diagnostics.Debug.WriteLine( "RenderPnl: starting" );
-
         var renderer = new PnlRenderer();
 
         var result = renderer.Render(
-            _pnl,
-            _cgx,
-            _col,
+            pnl: _pnl,
+            cgx: _cgx,
+            col: _col,
             zoom: ZoomLevel,
             forceVisible: false,
             showGrid: ShowGrid,
@@ -128,79 +159,95 @@ public class MapPnlViewerViewModel : ViewModelBase
             debugTint: ShowDebugOverlay
         );
 
-        System.Diagnostics.Debug.WriteLine( $"RenderPnl: result = {result.Width}x{result.Height}" );
-
         PnlBitmap = BitmapFactory.FromRenderResult( result );
-
-        System.Diagnostics.Debug.WriteLine( "RenderPnl: bitmap assigned" );
     }
-
-
 
     private void RenderMap()
     {
-        //if ( _map == null || _pnl == null || _cgx == null || _col == null )
-        //{
-        //    MapBitmap = null;
-        //    return;
-        //}
-
-        //// Stub: you’ll implement MapRenderer with this signature:
-        //// RenderResult Render(MapFile map, PnlFile pnl, CgxFile cgx, ColFile col)
-        //var renderer = new MapRenderer();
-
-        //var result = renderer.Render(_map, _pnl, _cgx, _col);
-
-        //MapBitmap = BitmapFactory.FromRenderResult( result );
-    }
-
-
-
-
-
-    // ---------------------------------------
-    // GRID & ZOOM
-    // ---------------------------------------
-    public int ZoomLevel
-    {
-        get => _zoomLevel;
-        set
+        // MAP requires PNL + CGX + COL to render correctly
+        if ( _map == null )
         {
-            _zoomLevel = value < 1 ? 1 : value;
-            OnPropertyChanged();
-            RenderAll();
-
-            // Grid toggle only enabled at zoom >= 2
-            OnPropertyChanged( nameof( IsGridToggleEnabled ) );
-
-            // Auto-disable grid at 100%
-            if ( _zoomLevel == 1 )
-                ShowGrid = false;
+            MapBitmap = null;
+            return;
         }
+
+        if ( _pnl == null || _cgx == null || _col == null )
+        {
+            // Render MAP-only debug view (optional)
+            MapBitmap = RenderMapWithoutPnl();
+            return;
+        }
+
+        var renderer = new MapRenderer();
+
+        var result = renderer.Render(
+            map: _map,
+            pnl: _pnl,
+            cgx: _cgx,
+            col: _col,
+            zoom: ZoomLevel,
+            showGrid: ShowGrid,
+            debugMode: ShowDebugOverlay,
+            debugTint: ShowDebugOverlay
+        );
+
+        MapBitmap = BitmapFactory.FromRenderResult( result );
     }
 
-
-    public bool ShowGrid
+    // -------------------------------------------------------
+    // MAP WITHOUT PNL SUPPORT
+    // -------------------------------------------------------
+    private WriteableBitmap RenderMapWithoutPnl()
     {
-        get => _showGrid;
-        set
+        // Render a simple debug-only MAP grid
+        // Each cell is a colored block based on PNL group index
+        // This allows MAP files to be viewed even without PNL
+
+        int cellSize = 16 * ZoomLevel;
+        int width = _map.Width * cellSize;
+        int height = _map.Height * cellSize;
+
+        var buffer = new byte[width * height * 4];
+
+        for ( int y = 0 ; y < _map.Height ; y++ )
         {
-            if ( _showGrid != value )
+            for ( int x = 0 ; x < _map.Width ; x++ )
             {
-                _showGrid = value;
-                OnPropertyChanged();
-                RenderPnl();
+                var cell = _map.Cells[x, y];
+                if ( cell == null )
+                    continue;
+
+                var color = DebugColors.GetColorForPnlTile(cell.PnlGroupIndex);
+
+                for ( int py = 0 ; py < cellSize ; py++ )
+                {
+                    for ( int px = 0 ; px < cellSize ; px++ )
+                    {
+                        int dx = x * cellSize + px;
+                        int dy = y * cellSize + py;
+
+                        int idx = (dy * width + dx) * 4;
+                        buffer[idx + 0] = color.B;
+                        buffer[idx + 1] = color.G;
+                        buffer[idx + 2] = color.R;
+                        buffer[idx + 3] = 255;
+                    }
+                }
             }
         }
+
+        return BitmapFactory.FromRenderResult( new RenderResult
+        {
+            Buffer = buffer ,
+            Width = width ,
+            Height = height
+        } );
     }
 
-    public bool IsGridToggleEnabled => ZoomLevel >= 2;
-
-
-
-    // ---------------------------------------
+    // -------------------------------------------------------
     // PNG EXPORTS
-    // ---------------------------------------
+    // -------------------------------------------------------
+
     public void SavePnlPng(string path)
     {
         if ( PnlBitmap == null )
@@ -214,11 +261,8 @@ public class MapPnlViewerViewModel : ViewModelBase
         };
 
         PnlBitmap.CopyPixels( r.Buffer , r.Width * 4 , 0 );
-
         BitmapFactory.SavePng( r , path );
     }
-
-
 
     public void SaveMapPng(string path)
     {
@@ -233,27 +277,6 @@ public class MapPnlViewerViewModel : ViewModelBase
         };
 
         MapBitmap.CopyPixels( r.Buffer , r.Width * 4 , 0 );
-
         BitmapFactory.SavePng( r , path );
     }
-
-
-
-    public void SavePng(string path)
-    {
-        if ( MapBitmap == null )
-            return;
-
-        var r = new RenderResult
-        {
-            Width = MapBitmap.PixelWidth,
-            Height = MapBitmap.PixelHeight,
-            Buffer = new byte[MapBitmap.PixelWidth * MapBitmap.PixelHeight * 4]
-        };
-
-        MapBitmap.CopyPixels( r.Buffer , r.Width * 4 , 0 );
-
-        BitmapFactory.SavePng( r , path );
-    }
-
 }

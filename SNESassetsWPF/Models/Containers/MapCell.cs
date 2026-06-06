@@ -1,47 +1,48 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace SNESassetsWPF.Models
+﻿namespace SNESassetsWPF.Models
 {
     /// <summary>
-    /// One of the (usually 64 x 64 ) Cells in a MAP file.
+    /// One cell in a MAP file. Each cell references a PNL tile-group.
     /// </summary>
     public class MapCell
     {
         /// <summary>
-        /// Cell x position within the Map grid.
+        /// X position in the MAP grid (0–63).
         /// </summary>
-        public int CellPositionX { get; set; }
-
+        public int X { get; set; }
 
         /// <summary>
-        /// Cell y position within the Map grid.
+        /// Y position in the MAP grid.
         /// </summary>
-        public int CellPositionY { get; set; }
-
+        public int Y { get; set; }
 
         /// <summary>
-        /// Cell contents x position within the PNL.
-        /// </summary>
-        public int PnlX { get; set; }
-
-
-        /// <summary>
-        /// Cell contents y position within the PNL.
-        /// </summary>
-        public int PnlY { get; set; }
-
-
-        /// <summary>
-        /// Stores a raw value as read from the MAP file.
+        /// Raw 16-bit MAP entry.
         /// </summary>
         public ushort RawValue { get; set; }
 
+        /// <summary>
+        /// Index of the PNL tile-group (0–1023).
+        /// </summary>
+        public int PnlGroupIndex => RawValue & 0x03FF;
 
         /// <summary>
-        /// Bool used when converting MAP + PNL to SCR
+        /// Palette row override (0–7).
         /// </summary>
-        public bool UsePanelAttributes { get; set; }
+        public int PaletteOverride => ( RawValue >> 10 ) & 0x07;
+
+        /// <summary>
+        /// Horizontal flip flag.
+        /// </summary>
+        public bool HFlip => ( RawValue & 0x2000 ) != 0;
+
+        /// <summary>
+        /// Vertical flip flag.
+        /// </summary>
+        public bool VFlip => ( RawValue & 0x4000 ) != 0;
+
+        /// <summary>
+        /// Priority flag.
+        /// </summary>
+        public bool Priority => ( RawValue & 0x8000 ) != 0;
     }
 }

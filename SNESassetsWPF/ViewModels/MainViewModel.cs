@@ -480,7 +480,43 @@ namespace SNESassetsWPF.ViewModels
 
         private void LoadMap(FileNode fileNode)
         {
+            if ( fileNode == null )
+                return;
+
+            Debug.WriteLine( $"LoadMap called for: {fileNode.FullPath}" );
+
+            try
+            {
+                // 1. Read raw bytes
+                var readResult = MapFileReader.Load(fileNode.FullPath);
+
+                LoadedMapPath = fileNode.FullPath;
+
+                if ( !readResult.Success )
+                {
+                    Debug.WriteLine( "MAP read error: " + readResult.ErrorMessage );
+                    return;
+                }
+
+                // 2. Parse raw bytes into a MapFile
+                //    NOTE: property name is RawFile, not RawBytes
+                var map = MapParser.Parse(readResult.RawFile);
+
+                // 3. Store parsed MAP
+                CurrentMap = map;
+
+                // 4. Update viewer
+                MapPnlViewer.CurrentMap = map;
+
+                Debug.WriteLine( "MAP loaded successfully." );
+            }
+            catch ( Exception ex )
+            {
+                Debug.WriteLine( "LoadMap exception: " + ex.Message );
+            }
         }
+
+
 
 
 

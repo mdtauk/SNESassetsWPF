@@ -3,59 +3,40 @@
 namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// Parsed MAP file.
-    /// Contains a grid of MapCells holding references to PNL Tiles.
+    /// Parsed MAP file. Contains a grid of MapCells referencing PNL groups.
     /// </summary>
     public class MapFile
     {
         /// <summary>
-        /// Raw 0x100‑byte MAP header.
+        /// Raw 0x100-byte MAP header.
         /// </summary>
         public byte[] Header { get; set; }
 
-
         /// <summary>
-        /// Width of the MAP in MapCells.
+        /// Width of the MAP in PNL-groups (always 64).
         /// </summary>
-        public int Width { get; set; }
-
+        public int Width { get; set; } = 64;
 
         /// <summary>
-        /// Height of the MAP in MapCells.
+        /// Height of the MAP in PNL-groups.
+        /// Computed from file length.
         /// </summary>
         public int Height { get; set; }
 
-
         /// <summary>
         /// True if Mode 7 flag is set in the MAP header.
-        /// (Not currently decoded, but reserved for future use.)
         /// </summary>
         public bool IsMode7Enabled { get; set; }
 
-
         /// <summary>
         /// 2D array of MAP cells (Width × Height).
-        /// Each cell stores coordinates into the PNL panel.
         /// </summary>
         public MapCell[,] Cells { get; set; }
 
-
-
-
-
-        /// <summary>
-        /// A Map File created as we Parse a MAP file
-        /// </summary>
-        /// <param name="width"></param>
-        /// <param name="height"></param>
-        public MapFile(int width , int height)
+        public MapFile(int height)
         {
-            Width = width;
             Height = height;
-
-            Cells = new MapCell[width , height];
-
-            // Allocate header to correct size (0x100)
+            Cells = new MapCell[Width , Height];
             Header = new byte[0x100];
         }
     }
