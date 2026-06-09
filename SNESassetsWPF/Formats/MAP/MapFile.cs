@@ -73,6 +73,8 @@ namespace SNESassetsWPF.Models
         /// Instead, it defines how many PNL tiles form one MAP cell.
         ///
         /// Example:
+        ///     exponent = 0 → metaWidth  = 1  (8×8 tile)
+        ///     exponent = 1 → metaWidth  = 2  (16×16 meta‑tile)
         ///     exponent = 2 → metaWidth  = 4  (32×32 meta‑tile)
         ///
         /// Rendering a MAP cell requires fetching a metaWidth × metaHeight
