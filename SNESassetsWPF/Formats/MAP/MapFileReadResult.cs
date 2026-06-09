@@ -4,22 +4,17 @@ namespace SNESassetsWPF.Formats
 {
     /// <summary>
     /// Result wrapper for MAP file loading.
-    /// Contains raw bytes, optional parsed MapFile, and error state.
+    /// Contains:
+    ///   • Success flag
+    ///   • Error message (if any)
+    ///   • Raw MAP bytes (0x100 header + N*2 cell data)
+    ///
+    /// Parsing is performed separately by MapParser.
     /// </summary>
     public class MapFileReadResult
     {
         /// <summary>
-        /// Raw MAP file bytes as read from disk.
-        /// </summary>
-        public byte[] RawFile { get; set; } = Array.Empty<byte>();
-
-        /// <summary>
-        /// Parsed MapFile (null until the parser constructs it).
-        /// </summary>
-        public MapFile Map { get; set; }
-
-        /// <summary>
-        /// True if the MAP file was successfully read.
+        /// True if the MAP file was successfully read from disk.
         /// </summary>
         public bool Success { get; set; }
 
@@ -27,6 +22,12 @@ namespace SNESassetsWPF.Formats
         /// Error message if Success == false.
         /// </summary>
         public string ErrorMessage { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Raw MAP file bytes as read from disk.
+        /// Used for round‑tripping and parsing.
+        /// </summary>
+        public byte[] RawFile { get; set; } = Array.Empty<byte>();
 
         /// <summary>
         /// Convenience helper for failure cases.
@@ -37,7 +38,7 @@ namespace SNESassetsWPF.Formats
         /// <summary>
         /// Convenience helper for success cases.
         /// </summary>
-        public static MapFileReadResult Ok(MapFile map , byte[] raw)
-            => new MapFileReadResult { Success = true , Map = map , RawFile = raw };
+        public static MapFileReadResult Ok(byte[] raw)
+            => new MapFileReadResult { Success = true , RawFile = raw };
     }
 }

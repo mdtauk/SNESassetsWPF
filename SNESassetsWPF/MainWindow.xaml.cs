@@ -83,26 +83,6 @@ namespace SNESassetsWPF
         }
 
 
-        /// <summary>
-        /// Run Dbug on demand
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void menuTest_Click(object sender , RoutedEventArgs e)
-        {
-            var vm = (MainViewModel)DataContext;
-
-            if ( vm?.CurrentPnl == null )
-            {
-                Debug.WriteLine( "No PNL loaded." );
-                return;
-            }
-
-            for ( int i = 0 ; i < 10 ; i++ )
-                DebugPrintPnlTile( vm.CurrentPnl , i );
-        }
-
-
 
 
 
@@ -272,62 +252,6 @@ namespace SNESassetsWPF
             {
                 e.Handled = true; // stops ListBox from selecting the row
             }
-        }
-
-
-
-
-
-
-
-
-
-
-
-        private void DebugPrintPnlTile(PnlFile pnl , int pnlIndex)
-        {
-            if ( pnl == null )
-            {
-                Debug.WriteLine( "PNL is null." );
-                return;
-            }
-
-            if ( pnlIndex < 0 || pnlIndex >= pnl.Tiles.Length )
-            {
-                Debug.WriteLine( $"PNL[{pnlIndex}] is out of range" );
-                return;
-            }
-
-            var tile = pnl.Tiles[pnlIndex];
-            if ( tile == null )
-            {
-                Debug.WriteLine( $"PNL[{pnlIndex}] = null" );
-                return;
-            }
-
-            int x = pnlIndex % 32;
-            int y = pnlIndex / 32;
-
-            Debug.WriteLine( $"PNL[{pnlIndex}] at ({x},{y})" );
-            Debug.WriteLine( "--------------------------------------------" );
-
-            Debug.WriteLine( $"  RawAttributeWord = 0x{tile.RawAttributeWord:X4}" );
-            Debug.WriteLine( $"  IsVisible        = {tile.IsVisible}" );
-            Debug.WriteLine( "" );
-
-            Debug.WriteLine( $"  TileIndex        = {tile.TileIndex}" );
-            Debug.WriteLine( $"  PaletteRow       = {tile.PaletteRow}" );
-            Debug.WriteLine( $"  HFlip            = {tile.HFlip}" );
-            Debug.WriteLine( $"  VFlip            = {tile.VFlip}" );
-            Debug.WriteLine( "" );
-
-            // CGX sheet coordinates (16 tiles per row)
-            const int CgxSheetWidth = 16;
-            int sheetX = tile.TileIndex % CgxSheetWidth;
-            int sheetY = tile.TileIndex / CgxSheetWidth;
-
-            Debug.WriteLine( $"  CGX Sheet Pos    = ({sheetX},{sheetY})" );
-            Debug.WriteLine( "--------------------------------------------" );
         }
 
     }

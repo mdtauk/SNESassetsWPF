@@ -85,8 +85,10 @@ namespace SNESassetsWPF.ViewModels
             RootItems.Clear();
 
             BuiltInFileNode = _builtIn.GetBuiltInCgxFile();
+
             RootItems.Add( BuiltInFileNode );
         }
+
 
 
 

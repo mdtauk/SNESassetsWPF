@@ -1,8 +1,9 @@
 ﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
-using SNESassetsWPF.Services;
 using SNESassetsWPF.Rendering;
+using SNESassetsWPF.Services;
 using System;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
@@ -11,29 +12,42 @@ namespace SNESassetsWPF.ViewModels
 {
     public class CgxViewerViewModel : INotifyPropertyChanged
     {
-        // ---------------------------------------------------------
+        //
+        // ─────────────────────────────────────────────────────────────
         //  Fields
-        // ---------------------------------------------------------
+        // ─────────────────────────────────────────────────────────────
+        //
         private CgxFile _cgxFile;
         private ColFile _colFile;
         private WriteableBitmap _cgxBitmap;
 
-        public PaletteViewModel Palette { get; set; }
-
         private int _tilesPerRow = 16;
-
-        // -1 = use file's bit depth
         private int _bitDepthOverride = -1;
 
-        // Zoom + Grid
-        private int _zoomLevel = 1;   // 1 = 100%, 2 = 200%, 3 = 300%, 4 = 400%
+        private int _zoomLevel = 1;
         private bool _showGrid = false;
 
 
-        // ---------------------------------------------------------
-        //  Public Properties
-        // ---------------------------------------------------------
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Palette (Injected)
+        // ─────────────────────────────────────────────────────────────
+        //
+        public PaletteViewModel Palette { get; }
+
+        public ReadOnlyCollection<PaletteEntry> ActivePalette =>
+            Palette?.ActivePalette;
+
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Public Properties
+        // ─────────────────────────────────────────────────────────────
+        //
         public CgxFile CgxFile
         {
             get => _cgxFile;
@@ -46,7 +60,6 @@ namespace SNESassetsWPF.ViewModels
                     OnPropertyChanged( nameof( HasCgx ) );
 
                     BitDepthOverride = _cgxFile?.BitDepth ?? -1;
-
                     RenderCgx();
                 }
             }
@@ -86,6 +99,12 @@ namespace SNESassetsWPF.ViewModels
 
 
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Headers
+        // ─────────────────────────────────────────────────────────────
+        //
         private WriteableBitmap _columnHeader;
         public WriteableBitmap ColumnHeader
         {
@@ -110,6 +129,11 @@ namespace SNESassetsWPF.ViewModels
 
 
 
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Layout Properties
+        // ─────────────────────────────────────────────────────────────
+        //
         public int TilesPerRow
         {
             get => _tilesPerRow;
@@ -149,10 +173,13 @@ namespace SNESassetsWPF.ViewModels
         }
 
 
-        // ---------------------------------------------------------
-        //  Zoom + Grid Toggle
-        // ---------------------------------------------------------
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Zoom + Grid
+        // ─────────────────────────────────────────────────────────────
+        //
         public int ZoomLevel
         {
             get => _zoomLevel;
@@ -162,11 +189,8 @@ namespace SNESassetsWPF.ViewModels
                 {
                     _zoomLevel = value;
                     OnPropertyChanged();
-
-                    // Grid toggle only enabled at zoom >= 2
                     OnPropertyChanged( nameof( IsGridToggleEnabled ) );
 
-                    // Auto-disable grid at 100%
                     if ( _zoomLevel == 1 )
                         ShowGrid = false;
 
@@ -192,10 +216,13 @@ namespace SNESassetsWPF.ViewModels
         public bool IsGridToggleEnabled => ZoomLevel >= 2;
 
 
-        // ---------------------------------------------------------
-        //  Rendering
-        // ---------------------------------------------------------
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Rendering
+        // ─────────────────────────────────────────────────────────────
+        //
         public void RenderCgx()
         {
             if ( CgxFile == null || ColFile == null )
@@ -220,37 +247,7 @@ namespace SNESassetsWPF.ViewModels
 
                 CgxBitmap = BitmapFactory.FromRenderResult( render );
 
-                // ---------------------------------------------------------
-                // Generate Headers (Column + Row)
-                // ---------------------------------------------------------
-                try
-                {
-                    int spacing = (ShowGrid && ZoomLevel >= 2) ? 1 : 0;
-
-                    // Column header (top)
-                    ColumnHeader = HeaderGenerator.GenerateColumnHeader(
-                        TilesPerRow ,
-                        ZoomLevel ,
-                        ShowGrid
-                    );
-
-                    // Row header (left)
-                    int rows = (int)Math.Ceiling(CgxFile.TileCount / (double)TilesPerRow);
-
-                    RowHeader = HeaderGenerator.GenerateRowHeader(
-                        CgxFile.TileCount ,
-                        TilesPerRow ,
-                        ZoomLevel ,
-                        ShowGrid
-                    );
-
-                    Spacer = HeaderGenerator.GenerateSpacer( ZoomLevel , ShowGrid );
-                }
-                catch ( Exception ex )
-                {
-                    Console.WriteLine( "Header generation error: " + ex.Message );
-                }
-
+                GenerateHeaders();
             }
             catch ( Exception ex )
             {
@@ -259,10 +256,41 @@ namespace SNESassetsWPF.ViewModels
         }
 
 
-        // ---------------------------------------------------------
-        //  PNG Export (grid always OFF)
-        // ---------------------------------------------------------
+        private void GenerateHeaders()
+        {
+            try
+            {
+                ColumnHeader = HeaderGenerator.GenerateColumnHeader(
+                    TilesPerRow ,
+                    ZoomLevel ,
+                    ShowGrid
+                );
 
+                int rows = (int)Math.Ceiling(CgxFile.TileCount / (double)TilesPerRow);
+
+                RowHeader = HeaderGenerator.GenerateRowHeader(
+                    CgxFile.TileCount ,
+                    TilesPerRow ,
+                    ZoomLevel ,
+                    ShowGrid
+                );
+
+                Spacer = HeaderGenerator.GenerateSpacer( ZoomLevel , ShowGrid );
+            }
+            catch ( Exception ex )
+            {
+                Console.WriteLine( "Header generation error: " + ex.Message );
+            }
+        }
+
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PNG Export
+        // ─────────────────────────────────────────────────────────────
+        //
         public void ExportPng(string path , int zoom)
         {
             if ( CgxFile == null || ColFile == null )
@@ -277,29 +305,38 @@ namespace SNESassetsWPF.ViewModels
                 Palette.SelectedPaletteRowIndex,
                 TilesPerRow,
                 zoom: zoom,
-                showGrid: false   // ALWAYS OFF FOR EXPORT
+                showGrid: false
             );
 
             BitmapFactory.SavePng( render , path );
         }
 
 
-        // ---------------------------------------------------------
-        //  INotifyPropertyChanged
-        // ---------------------------------------------------------
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  INotifyPropertyChanged
+        // ─────────────────────────────────────────────────────────────
+        //
         public event PropertyChangedEventHandler PropertyChanged;
 
         private void OnPropertyChanged([CallerMemberName] string name = null)
             => PropertyChanged?.Invoke( this , new PropertyChangedEventArgs( name ) );
 
 
-        // ---------------------------------------------------------
-        // Constructor
-        // ---------------------------------------------------------
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  Constructor
+        // ─────────────────────────────────────────────────────────────
+        //
         public CgxViewerViewModel()
         {
             Palette = new PaletteViewModel();
+
+            // React to palette changes
             Palette.PaletteChanged += RenderCgx;
         }
     }

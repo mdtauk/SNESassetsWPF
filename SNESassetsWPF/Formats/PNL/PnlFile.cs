@@ -1,37 +1,78 @@
-﻿using SNESassetsWPF.Models;
-
-namespace SNESassetsWPF.Formats
+﻿namespace SNESassetsWPF.Formats
 {
+    /// <summary>
+    /// Represents a PNL file exactly as stored by S‑CG‑CAD.
+    ///
+    /// A PNL file has a FIXED binary layout:
+    ///
+    ///   0x0000–0x00FF : 256‑byte header (editor metadata only)
+    ///   0x0100–0x80FF : 0x8000‑byte attribute table (16384 entries × 2 bytes)
+    ///   0x8100–0x100FF: 0x8000‑byte flag table      (16384 entries × 2 bytes)
+    ///
+    /// Total tile count is ALWAYS 16384.
+    /// Tiles are arranged in a FIXED 32×512 grid.
+    ///
+    /// None of these dimensions are stored in the file — they are implicit
+    /// to the S‑CG‑CAD format and must be enforced by the parser.
+    /// </summary>
     public class PnlFile
     {
         /// <summary>
-        /// 16384 tiles (0x4000), each one 8×8 pixels.
+        /// Size of the header block at the start of the file.
         /// </summary>
-        public PnlTile[] Tiles { get; set; } = new PnlTile[0x4000];
-
+        public const int HeaderSize = 0x100;
 
         /// <summary>
-        /// Palette block selector (header[0x65]).
+        /// Number of tiles in every S‑CG‑CAD PNL file.
         /// </summary>
-        public byte ColHalf { get; set; }
-
+        public const int EntryCount = 16384;
 
         /// <summary>
-        /// Base palette cell (header[0x66]).
+        /// Logical width of the PNL tilemap (in tiles).
+        /// This is a fixed property of the file format.
         /// </summary>
-        public byte ColCell { get; set; }
-
+        public const int Width = 32;
 
         /// <summary>
-        /// Width of a single group of Tiles.
+        /// Logical height of the PNL tilemap (in tiles).
+        /// This is a fixed property of the file format.
         /// </summary>
-        public int GroupWidth { get; set; }
-
+        public const int Height = 512;
 
         /// <summary>
-        /// Height of a single group of Tiles.
+        /// Raw file bytes exactly as loaded from disk.
+        /// Stored for round‑tripping and debugging.
         /// </summary>
-        public int GroupHeight { get; set; }
+        public byte[] RawFile { get; set; } = Array.Empty<byte>();
+
+        /// <summary>
+        /// The 0x100‑byte header block.
+        /// Contains editor metadata (not used by SNES hardware).
+        /// </summary>
+        public byte[] Header { get; set; } = new byte[HeaderSize];
+
+        /// <summary>
+        /// Parsed entries.
+        /// Each entry contains:
+        ///   • Raw attribute word (from attribute table)
+        ///   • Raw flag word      (from flag table)
+        ///   • Decoded fields (TileIndex, PaletteRow, flips, IsPresent)
+        ///
+        /// Length is ALWAYS 16384.
+        /// </summary>
+        public PnlEntry[] Entries { get; set; } = new PnlEntry[EntryCount];
+
+        /// <summary>
+        /// Safe accessor for an entry at (x,y).
+        /// Returns null if out of bounds.
+        /// </summary>
+        public PnlEntry? GetEntry(int x , int y)
+        {
+            if ( x < 0 || y < 0 || x >= Width || y >= Height )
+                return null;
+
+            return Entries[y * Width + x];
+        }
+
     }
-
 }

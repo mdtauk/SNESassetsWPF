@@ -1,38 +1,47 @@
-﻿using SNESassetsWPF.Formats;
+﻿using SNESassetsWPF.Enums;
+using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 using System.Windows.Media;
 
 namespace SNESassetsWPF.Rendering
 {
-    public class ScrRenderer
+    public static class ScrRenderer
     {
-        private readonly ScrFile _scr;
-        private readonly CgxFile _cgx;
-        private readonly ColFile _col;
-        private readonly bool _showGrid;
-        private readonly bool _showInvisibleTiles;
-
         private const int TileWidth  = 8;
         private const int TileHeight = 8;
 
-        public ScrRenderer(ScrFile scr , CgxFile cgx , ColFile col , bool showGrid , bool showInvisibleTiles)
+        public static RenderResult Render(
+            ScrFile scr ,
+            CgxFile cgx ,
+            ColFile col ,
+            int zoom = 1 ,
+            bool showGrid = false ,
+            bool showInvisible = false ,
+            ScrDebugMode debugMode = ScrDebugMode.None)
         {
-            _scr = scr;
-            _cgx = cgx;
-            _col = col;
-            _showGrid = showGrid;
-            _showInvisibleTiles = showInvisibleTiles;
-        }
+            if ( scr == null )
+            {
+                return new RenderResult
+                {
+                    Buffer = Array.Empty<byte>() ,
+                    Width = 0 ,
+                    Height = 0
+                };
+            }
 
-        public RenderResult Render(int zoom)
-        {
+
             if ( zoom < 1 )
                 zoom = 1;
 
-            int spacing = (_showGrid && zoom >= 2) ? 1 : 0;
+            bool hasCgx = cgx != null;
+            bool hasCol = col != null;
 
-            int widthTiles  = _scr.WidthTiles;
-            int heightTiles = _scr.HeightTiles;
+            int blocks = scr.BlockCount;
+
+            int widthTiles  = (blocks == 1) ? 32 : 64;
+            int heightTiles = (blocks <= 2) ? 32 : 64;
+
+            int spacing = (showGrid && zoom >= 2) ? 1 : 0;
 
             int baseWidth  = widthTiles  * TileWidth;
             int baseHeight = heightTiles * TileHeight;
@@ -42,72 +51,211 @@ namespace SNESassetsWPF.Rendering
 
             var buffer = new byte[width * height * 4];
 
-            // Draw tiles
-            for ( int ty = 0 ; ty < heightTiles ; ty++ )
+            // ─────────────────────────────────────────────
+            // 1. Base tile rendering (SCR → CGX → COL)
+            // ─────────────────────────────────────────────
+            for ( int block = 0 ; block < blocks ; block++ )
             {
-                for ( int tx = 0 ; tx < widthTiles ; tx++ )
+                var scrBlock = scr.Blocks[block];
+                if ( scrBlock == null )
+                    continue;
+
+                int blockBaseX = (block == 1 || block == 3) ? 32 : 0;
+                int blockBaseY = (block >= 2) ? 32 : 0;
+
+                for ( int i = 0 ; i < scrBlock.Entries.Length ; i++ )
                 {
-                    var scrTile = _scr.Tiles[ty, tx];
-
-                    // NEW: skip hidden tiles
-                    if ( !scrTile.Visible && !_showInvisibleTiles )
+                    var entry = scrBlock.Entries[i];
+                    if ( entry == null )
                         continue;
 
-                    // Validate tile index
-                    if ( scrTile.TileIndex < 0 || scrTile.TileIndex >= _cgx.Tiles.Length )
+                    if ( !entry.IsVisible && !showInvisible )
                         continue;
 
-                    var cgxTile = _cgx.GetTile(scrTile.TileIndex);
+                    int localX = i % 32;
+                    int localY = i / 32;
 
-                    DrawTile(
+                    int tileX = blockBaseX + localX;
+                    int tileY = blockBaseY + localY;
+
+                    int px = (tileX * TileWidth  * zoom) + (tileX * spacing);
+                    int py = (tileY * TileHeight * zoom) + (tileY * spacing);
+
+                    if ( !hasCgx || !hasCol )
+                    {
+                        DrawFallbackTile( buffer , width , height , px , py , zoom );
+                        continue;
+                    }
+
+                    int cgxIndex = entry.TileIndex;
+                    if ( cgxIndex < 0 || cgxIndex >= cgx.TileCount )
+                    {
+                        DrawFallbackTile( buffer , width , height , px , py , zoom );
+                        continue;
+                    }
+
+                    var tile = cgx.Tiles[cgxIndex];
+                    if ( tile == null )
+                    {
+                        DrawFallbackTile( buffer , width , height , px , py , zoom );
+                        continue;
+                    }
+
+                    DrawCgxTile(
                         buffer ,
                         width ,
                         height ,
-                        tx ,
-                        ty ,
-                        cgxTile ,
-                        scrTile ,
-                        zoom ,
-                        spacing
+                        px ,
+                        py ,
+                        tile ,
+                        col ,
+                        entry.PaletteRow ,
+                        entry.HFlip ,
+                        entry.VFlip ,
+                        cgx.BitDepth ,
+                        zoom
                     );
                 }
             }
 
-            // Grid in the gaps
-            if ( _showGrid && zoom >= 2 )
+            // ─────────────────────────────────────────────
+            // 2. Debug tint (global)
+            // ─────────────────────────────────────────────
+            if ( debugMode != ScrDebugMode.None )
             {
-                byte R = 128, G = 128, B = 128, A = 255;
+                DebugOverlay.ApplyTintToSurface(
+                    buffer ,
+                    width ,
+                    height ,
+                    Color.FromArgb( 255 , 128 , 128 , 128 ) ,
+                    0.25
+                );
+            }
 
-                // Vertical lines
-                for ( int tx = 1 ; tx < widthTiles ; tx++ )
+            // ─────────────────────────────────────────────
+            // 3. Debug patterns + glyphs (per tile)
+            // ─────────────────────────────────────────────
+            if ( debugMode != ScrDebugMode.None )
+            {
+                for ( int block = 0 ; block < blocks ; block++ )
                 {
-                    int x = (tx * TileWidth * zoom) + ((tx - 1) * spacing);
+                    var scrBlock = scr.Blocks[block];
+                    if ( scrBlock == null )
+                        continue;
 
-                    for ( int y = 0 ; y < height ; y++ )
+                    int blockBaseX = (block == 1 || block == 3) ? 32 : 0;
+                    int blockBaseY = (block >= 2) ? 32 : 0;
+
+                    for ( int i = 0 ; i < scrBlock.Entries.Length ; i++ )
                     {
-                        int idx = (y * width + x) * 4;
-                        buffer[idx + 0] = B;
-                        buffer[idx + 1] = G;
-                        buffer[idx + 2] = R;
-                        buffer[idx + 3] = A;
+                        var entry = scrBlock.Entries[i];
+                        if ( entry == null )
+                            continue;
+
+                        int localX = i % 32;
+                        int localY = i / 32;
+
+                        int tileX = blockBaseX + localX;
+                        int tileY = blockBaseY + localY;
+
+                        int tilePixelX = (tileX * TileWidth  * zoom) + (tileX * spacing);
+                        int tilePixelY = (tileY * TileHeight * zoom) + (tileY * spacing);
+
+                        // Pattern overlay
+                        DrawPatternForTile(
+                            buffer ,
+                            width ,
+                            height ,
+                            tilePixelX ,
+                            tilePixelY ,
+                            zoom
+                        );
+
+                        // Glyphs
+                        switch ( debugMode )
+                        {
+                            case ScrDebugMode.TileIndex:
+                            case ScrDebugMode.PaletteRowIndex:
+                            case ScrDebugMode.Priority:
+                                {
+                                    var glyph = DebugGlyphs.GetGlyphForMode(debugMode, entry);
+                                    if ( glyph != null )
+                                    {
+                                        int inset = 2; // fixed screen pixels
+                                        int glyphScale = (zoom > 1) ? 2 : 1;
+
+                                        DebugOverlay.DrawGlyph8x8InTile(
+                                            buffer ,
+                                            width ,
+                                            height ,
+                                            tilePixelX + inset ,
+                                            tilePixelY + inset ,
+                                            glyphScale ,
+                                            glyph
+                                        );
+
+                                    }
+                                    break;
+                                }
+
+                            case ScrDebugMode.Flip:
+                                {
+                                    int inset = 3 * zoom;
+
+                                    // Vertical arrow (top-left)
+                                    if ( entry.VFlip )
+                                    {
+                                        DebugOverlay.DrawGlyphCustom(
+                                            buffer ,
+                                            width ,
+                                            height ,
+                                            tilePixelX + inset ,
+                                            tilePixelY + inset ,
+                                            zoom ,
+                                            DebugGlyphs.FlipVerticalArrow
+                                        );
+                                    }
+
+                                    // Horizontal arrow (bottom-right)
+                                    if ( entry.HFlip )
+                                    {
+                                        int gh = DebugGlyphs.FlipHorizontalArrow.GetLength(0) * zoom;
+                                        int gw = DebugGlyphs.FlipHorizontalArrow.GetLength(1) * zoom;
+
+                                        DebugOverlay.DrawGlyphCustom(
+                                            buffer ,
+                                            width ,
+                                            height ,
+                                            tilePixelX + ( TileWidth * zoom - gw - inset ) ,
+                                            tilePixelY + ( TileHeight * zoom - gh - inset ) ,
+                                            zoom ,
+                                            DebugGlyphs.FlipHorizontalArrow
+                                        );
+                                    }
+
+                                    break;
+                                }
+                        }
                     }
                 }
+            }
 
-                // Horizontal lines
-                for ( int ty = 1 ; ty < heightTiles ; ty++ )
-                {
-                    int y = (ty * TileHeight * zoom) + ((ty - 1) * spacing);
-
-                    int rowOffset = y * width * 4;
-                    for ( int x = 0 ; x < width ; x++ )
-                    {
-                        int idx = rowOffset + x * 4;
-                        buffer[idx + 0] = B;
-                        buffer[idx + 1] = G;
-                        buffer[idx + 2] = R;
-                        buffer[idx + 3] = A;
-                    }
-                }
+            // ─────────────────────────────────────────────
+            // 4. Grid (on top)
+            // ─────────────────────────────────────────────
+            if ( showGrid && zoom >= 2 )
+            {
+                DebugOverlay.DrawGrid(
+                    buffer ,
+                    width ,
+                    height ,
+                    TileWidth * zoom ,
+                    TileHeight * zoom ,
+                    zoom ,
+                    spacing ,
+                    widthTiles ,
+                    heightTiles
+                );
             }
 
             return new RenderResult
@@ -118,69 +266,159 @@ namespace SNESassetsWPF.Rendering
             };
         }
 
-        private void DrawTile(
+        // ─────────────────────────────────────────────
+        // Fallback tile (grey checkerboard)
+        // ─────────────────────────────────────────────
+        private static void DrawFallbackTile(
             byte[] buffer ,
-            int bufferWidth ,
-            int bufferHeight ,
-            int tileX ,
-            int tileY ,
-            CgxTile cgxTile ,
-            ScrTile scrTile ,
-            int zoom ,
-            int spacing)
+            int width ,
+            int height ,
+            int px ,
+            int py ,
+            int zoom)
         {
-            int tileOriginX = (tileX * TileWidth  * zoom) + (tileX * spacing);
-            int tileOriginY = (tileY * TileHeight * zoom) + (tileY * spacing);
-
-            int paletteRow = scrTile.PaletteIndex;
-
-            for ( int py = 0 ; py < TileHeight ; py++ )
+            for ( int y = 0 ; y < TileHeight * zoom ; y++ )
             {
-                int srcY = scrTile.VFlip ? (TileHeight - 1 - py) : py;
-
-                for ( int px = 0 ; px < TileWidth ; px++ )
+                for ( int x = 0 ; x < TileWidth * zoom ; x++ )
                 {
-                    int srcX = scrTile.HFlip ? (TileWidth - 1 - px) : px;
+                    int dx = px + x;
+                    int dy = py + y;
 
-                    byte colorIndex = cgxTile.Pixels[srcY, srcX];
-
-                    if ( colorIndex == 0 )
+                    if ( dx < 0 || dx >= width || dy < 0 || dy >= height )
                         continue;
 
-                    if ( paletteRow < 0 || paletteRow >= 16 )
-                        continue;
-                    if ( colorIndex < 0 || colorIndex >= 16 )
+                    bool dark = ((x / zoom) + (y / zoom)) % 2 == 0;
+                    byte v = dark ? (byte)80 : (byte)140;
+
+                    int idx = (dy * width + dx) * 4;
+                    buffer[idx + 0] = v;
+                    buffer[idx + 1] = v;
+                    buffer[idx + 2] = v;
+                    buffer[idx + 3] = 255;
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // Per-tile pattern (diagonal stripes)
+        // ─────────────────────────────────────────────
+        private static void DrawPatternForTile(
+            byte[] buffer ,
+            int width ,
+            int height ,
+            int px ,
+            int py ,
+            int zoom)
+        {
+            int w = TileWidth * zoom;
+            int h = TileHeight * zoom;
+
+            for ( int y = 0 ; y < h ; y++ )
+            {
+                for ( int x = 0 ; x < w ; x++ )
+                {
+                    if ( ( ( x + y ) & 3 ) != 0 )
                         continue;
 
-                    Color c = _col.GetColor(paletteRow, colorIndex);
+                    int dx = px + x;
+                    int dy = py + y;
 
-                    int destX0 = tileOriginX + (px * zoom);
-                    int destY0 = tileOriginY + (py * zoom);
+                    if ( dx < 0 || dx >= width || dy < 0 || dy >= height )
+                        continue;
+
+                    int idx = (dy * width + dx) * 4;
+
+                    buffer[idx + 0] = (byte)( buffer[idx + 0] / 2 );
+                    buffer[idx + 1] = (byte)( buffer[idx + 1] / 2 );
+                    buffer[idx + 2] = (byte)( buffer[idx + 2] / 2 );
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // CGX tile drawing
+        // ─────────────────────────────────────────────
+        private static void DrawCgxTile(
+            byte[] buffer ,
+            int width ,
+            int height ,
+            int px ,
+            int py ,
+            CgxTile tile ,
+            ColFile col ,
+            int paletteRow ,
+            bool hFlip ,
+            bool vFlip ,
+            int bitDepth ,
+            int zoom)
+        {
+            var pixels = tile.Pixels;
+
+            for ( int y = 0 ; y < TileHeight ; y++ )
+            {
+                for ( int x = 0 ; x < TileWidth ; x++ )
+                {
+                    int sx = hFlip ? (TileWidth - 1 - x) : x;
+                    int sy = vFlip ? (TileHeight - 1 - y) : y;
+
+                    byte baseIndex = pixels[sy, sx];
+
+                    int paletteIndex = ComputePaletteIndex(bitDepth, paletteRow, baseIndex);
+                    Color c = ResolveColor(col, paletteIndex);
+
+                    int dx0 = px + x * zoom;
+                    int dy0 = py + y * zoom;
 
                     for ( int zy = 0 ; zy < zoom ; zy++ )
                     {
-                        int destY = destY0 + zy;
-                        if ( destY < 0 || destY >= bufferHeight )
+                        int dy = dy0 + zy;
+                        if ( dy < 0 || dy >= height )
                             continue;
 
-                        int rowOffset = destY * bufferWidth * 4;
+                        int rowOffset = dy * width * 4;
 
                         for ( int zx = 0 ; zx < zoom ; zx++ )
                         {
-                            int destX = destX0 + zx;
-                            if ( destX < 0 || destX >= bufferWidth )
+                            int dx = dx0 + zx;
+                            if ( dx < 0 || dx >= width )
                                 continue;
 
-                            int idx = rowOffset + destX * 4;
-
+                            int idx = rowOffset + dx * 4;
                             buffer[idx + 0] = c.B;
                             buffer[idx + 1] = c.G;
                             buffer[idx + 2] = c.R;
-                            buffer[idx + 3] = 0xFF;
+                            buffer[idx + 3] = 255;
                         }
                     }
                 }
             }
         }
+
+        private static int ComputePaletteIndex(int bitDepth , int paletteRow , byte baseIndex)
+        {
+            return bitDepth switch
+            {
+                2 => ( paletteRow << 2 ) | ( baseIndex & 0x03 ),
+                4 => ( paletteRow << 4 ) | ( baseIndex & 0x0F ),
+                8 => baseIndex,
+                _ => baseIndex
+            };
+        }
+
+        private static Color ResolveColor(ColFile col , int paletteIndex)
+        {
+            int row = paletteIndex / 16;
+            int colIdx = paletteIndex % 16;
+            return col.GetColor( row , colIdx );
+        }
+
+
+        public static RenderResult Empty { get; } = new RenderResult
+        {
+            Buffer = Array.Empty<byte>() ,
+            Width = 0 ,
+            Height = 0
+        };
+
     }
 }

@@ -1,295 +1,369 @@
-﻿using SNESassetsWPF.Models;
+﻿using System;
+using System.Diagnostics;
+using SNESassetsWPF.Models;
 using SNESassetsWPF.Formats;
-using System;
 
 namespace SNESassetsWPF.Services
 {
+    /// <summary>
+    /// H‑CG‑CAD‑style CGX parser.
+    ///
+    /// CGX structure (editor-side):
+    ///   [0x0000 ...] Raw tile bitplane data (2/4/8bpp)
+    ///   [optional]   Metadata block (0x100 bytes, ASCII-ish, ends with 0x00)
+    ///   [optional]   Prefix table (0x400 bytes, 1 byte per tile, editor-only)
+    ///
+    /// This parser:
+    ///   • detects bit depth (2/4/8 bpp) using size patterns
+    ///   • supports up to 1024 tiles
+    ///   • detects presence of metadata and prefix table
+    ///   • decodes tiles into 8×8 pixel index arrays
+    ///   • applies prefix → PaletteRow for 4bpp when prefix exists
+    ///
+    /// Bit depth can still be overridden later via ReinterpretBitDepth.
+    /// </summary>
     public class CgxFileParser
     {
-        // ------------------------------------------------------------
-        // SNES tile sizes in bytes (editor-side CGX uses same layout)
-        // ------------------------------------------------------------
-        private const int TileSize2Bpp = 16;  // 2 bytes per row × 8 rows
-        private const int TileSize4Bpp = 32;  // 4 bytes per row × 8 rows
-        private const int TileSize8Bpp = 64;  // 8 bytes per row × 8 rows
-
-        // ------------------------------------------------------------
-        // Prefix table bit masks (S‑CG‑CAD editor-side)
-        // ------------------------------------------------------------
-        private const int PrefixPaletteMask = 0x0F; // lower 4 bits = palette group
-
-        // NOTE:
-        // FlipX / FlipY / Priority are UNKNOWN in S‑CG‑CAD CGX prefix format.
-        // Until we confirm the bit layout, we leave them unset (false/0).
-        // ------------------------------------------------------------
-
-        public CgxFile Parse(CgxFileReadResult raw)
+        public CgxFile Parse(byte[] raw)
         {
-            if ( !raw.IsValid )
-                throw new InvalidOperationException( raw.ErrorMessage );
+            if ( raw == null || raw.Length == 0 )
+                throw new Exception( "Empty CGX data." );
 
             var cgx = new CgxFile
             {
-                RawFile     = raw.RawFile,
-                BitDepth    = raw.BitDepth,
-                Metadata    = raw.Metadata,
-                RawTileData = raw.TileData,
-                TilePrefixTable = raw.PrefixTable
+                RawFile = raw
             };
 
-            // Determine bytes per tile
-            int bytesPerTile = raw.BitDepth switch
+            // ---------------------------------------------------------
+            // 1. Detect bit depth and layout from file size
+            // ---------------------------------------------------------
+            // We assume H‑CG‑CAD-style full sheets: up to 1024 tiles.
+            // For each candidate bpp, we check if the file size matches:
+            //   tileDataSize = 1024 * bytesPerTile
+            //   extra = raw.Length - tileDataSize
+            //   extra ∈ { 0, 0x100, 0x400, 0x500 }
+            //
+            //  extra = 0      → tile data only
+            //  extra = 0x100  → tile data + metadata
+            //  extra = 0x400  → tile data + prefix
+            //  extra = 0x500  → tile data + metadata + prefix
+            //
+            // If no pattern matches, we fall back to "best guess":
+            //   • choose 4bpp
+            //   • tileCount = floor(raw.Length / bytesPerTile)
+            //   • no metadata/prefix
+            int bitDepth;
+            int bytesPerTile;
+            int tileDataSize;
+            int extraSize;
+            bool hasMetadata = false;
+            bool hasPrefix = false;
+
+            if ( !TryDetectLayout( raw.Length , out bitDepth , out bytesPerTile , out tileDataSize , out extraSize , out hasMetadata , out hasPrefix ) )
             {
-                2 => TileSize2Bpp,
-                4 => TileSize4Bpp,
-                8 => TileSize8Bpp,
-                _ => TileSize4Bpp
-            };
+                // Fallback: assume 4bpp, no metadata/prefix, variable tile count
+                bitDepth = 4;
+                bytesPerTile = 32;
+                tileDataSize = raw.Length;
+                extraSize = 0;
+                hasMetadata = false;
+                hasPrefix = false;
 
+                Debug.WriteLine( $"[CGX] Unknown size {raw.Length} bytes — assuming 4bpp, no metadata/prefix." );
+            }
+
+            cgx.BitDepth = bitDepth;
             cgx.BytesPerTile = bytesPerTile;
-            cgx.TileCount = raw.TileData.Length / bytesPerTile;
+
+            // ---------------------------------------------------------
+            // 2. Extract tile data (up to 1024 tiles)
+            // ---------------------------------------------------------
+            int maxTiles = 1024;
+            int maxTileDataSize = bytesPerTile * maxTiles;
+
+            // Clamp tileDataSize to available data
+            if ( tileDataSize > raw.Length )
+                tileDataSize = raw.Length;
+
+            // Compute tile count from tileDataSize
+            int tileCount = tileDataSize / bytesPerTile;
+            if ( tileCount > maxTiles )
+                tileCount = maxTiles;
+
+            cgx.TileCount = tileCount;
+
+            cgx.RawTileData = new byte[tileCount * bytesPerTile];
+            Array.Copy( raw , 0 , cgx.RawTileData , 0 , cgx.RawTileData.Length );
+
+            // ---------------------------------------------------------
+            // 3. Extract metadata (if present)
+            // ---------------------------------------------------------
+            int offset = tileDataSize;
+            cgx.Metadata = Array.Empty<byte>();
+
+            if ( hasMetadata && extraSize >= 0x100 && raw.Length >= offset + 0x100 )
+            {
+                cgx.Metadata = new byte[0x100];
+                Array.Copy( raw , offset , cgx.Metadata , 0 , 0x100 );
+                offset += 0x100;
+            }
+
+            // ---------------------------------------------------------
+            // 4. Extract prefix table (if present)
+            // ---------------------------------------------------------
+            cgx.TilePrefixTable = Array.Empty<byte>();
+
+            if ( hasPrefix && raw.Length >= offset + 0x400 )
+            {
+                cgx.TilePrefixTable = new byte[0x400];
+                Array.Copy( raw , offset , cgx.TilePrefixTable , 0 , 0x400 );
+                offset += 0x400;
+            }
+
+            // ---------------------------------------------------------
+            // 5. Decode tiles
+            // ---------------------------------------------------------
             cgx.Tiles = new CgxTile[cgx.TileCount];
 
-            // Ensure prefix table exists
-            if ( cgx.TilePrefixTable == null || cgx.TilePrefixTable.Length == 0 )
-                cgx.TilePrefixTable = new byte[cgx.TileCount];
-
-            // ------------------------------------------------------------
-            // Decode each tile
-            // ------------------------------------------------------------
-            for ( int t = 0 ; t < cgx.TileCount ; t++ )
+            for ( int i = 0 ; i < cgx.TileCount ; i++ )
             {
-                int tileOffset = t * bytesPerTile;
-
-                // Decode pixels
-                byte[,] decodedPixels = DecodeTile(raw.TileData, tileOffset, raw.BitDepth);
-
-                // Extract raw bytes for inspection
-                byte[] rawBytes = new byte[bytesPerTile];
-                Buffer.BlockCopy( raw.TileData , tileOffset , rawBytes , 0 , bytesPerTile );
-
-                // Safe prefix fetch
-                byte prefix = (t < cgx.TilePrefixTable.Length)
-            ? cgx.TilePrefixTable[t]
-            : (byte)0;
-
-                cgx.Tiles[t] = new CgxTile
-                {
-                    TileIndex = t ,
-                    BitDepth = raw.BitDepth ,
-                    RawBytes = rawBytes ,
-                    Pixels = decodedPixels ,
-                    PaletteGroup = prefix & PrefixPaletteMask ,
-                    // FlipX / FlipY / Priority remain unset until prefix format confirmed
-                };
+                cgx.Tiles[i] = DecodeTile(
+                    cgx.RawTileData ,
+                    i * cgx.BytesPerTile ,
+                    cgx.BitDepth
+                );
             }
+
+            // ---------------------------------------------------------
+            // 6. Apply per‑tile prefix → PaletteRow (4bpp only)
+            // ---------------------------------------------------------
+            // H‑CG‑CAD uses the prefix byte as:
+            //   lower 4 bits = palette row (0–15) for 4bpp
+            // For 2bpp/8bpp, we leave PaletteRow at 0 (renderer can ignore or override).
+            if ( cgx.BitDepth == 4 &&
+                cgx.TilePrefixTable != null &&
+                cgx.TilePrefixTable.Length >= cgx.TileCount )
+            {
+                for ( int t = 0 ; t < cgx.TileCount ; t++ )
+                {
+                    byte prefix = cgx.TilePrefixTable[t];
+                    cgx.Tiles[t].PaletteRow = prefix & 0x0F;
+                }
+            }
+
+            // ---------------------------------------------------------
+            // 7. Default sheet layout (H‑CG‑CAD style)
+            // ---------------------------------------------------------
+            // H‑CG‑CAD typically uses 32×32 for full sheets, but for fewer tiles
+            // we still keep 32×32 as a logical grid; the renderer just won't
+            // draw beyond TileCount.
+            cgx.TilesX = 32;
+            cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / 32.0 );
 
             return cgx;
         }
 
-
-        // ------------------------------------------------------------
-        // Tile decoding dispatcher
-        // ------------------------------------------------------------
-        private byte[,] DecodeTile(byte[] data , int offset , int bitDepth) =>
-            bitDepth switch
-            {
-                2 => Decode2bppTile( data , offset ),
-                4 => Decode4bppTile( data , offset ),
-                8 => Decode8bppTile( data , offset ),
-                _ => Decode4bppTile( data , offset )
-            };
-
-        // ------------------------------------------------------------
-        // 2bpp tile decode (SNES bitplane format)
-        // ------------------------------------------------------------
-        private byte[,] Decode2bppTile(byte[] data , int offset)
+        /// <summary>
+        /// Try to detect bit depth and layout from file size.
+        /// Returns true if a known pattern is matched.
+        /// </summary>
+        private bool TryDetectLayout(
+            int length ,
+            out int bitDepth ,
+            out int bytesPerTile ,
+            out int tileDataSize ,
+            out int extraSize ,
+            out bool hasMetadata ,
+            out bool hasPrefix)
         {
-            var tile = new byte[8, 8];
+            bitDepth = 0;
+            bytesPerTile = 0;
+            tileDataSize = 0;
+            extraSize = 0;
+            hasMetadata = false;
+            hasPrefix = false;
 
-            const int BytesPerRow = 2;
+            // Candidate bit depths (try higher first)
+            int[] bpps = { 8, 4, 2 };
 
-            for ( int row = 0 ; row < 8 ; row++ )
+            foreach ( int bpp in bpps )
             {
-                int rowOffset = offset + (row * BytesPerRow);
+                int bpt = bpp * 8;          // bytes per tile
+                int fullTileData = bpt * 1024; // full 1024-tile sheet
 
-                byte plane0 = data[rowOffset + 0];
-                byte plane1 = data[rowOffset + 1];
+                if ( length < bpt ) // too small for even one tile
+                    continue;
 
-                for ( int col = 0 ; col < 8 ; col++ )
+                if ( length >= fullTileData )
                 {
-                    int bit = 7 - col;
+                    int extra = length - fullTileData;
 
-                    int b0 = (plane0 >> bit) & 1;
-                    int b1 = (plane1 >> bit) & 1;
+                    // Known extra sizes: 0, 0x100, 0x400, 0x500
+                    if ( extra == 0 || extra == 0x100 || extra == 0x400 || extra == 0x500 )
+                    {
+                        bitDepth = bpp;
+                        bytesPerTile = bpt;
+                        tileDataSize = fullTileData;
+                        extraSize = extra;
 
-                    tile[row , col] = (byte)( b0 | ( b1 << 1 ) );
+                        hasMetadata = ( extra == 0x100 || extra == 0x500 );
+                        hasPrefix = ( extra == 0x400 || extra == 0x500 );
+
+                        return true;
+                    }
                 }
+            }
+
+            // No known pattern matched
+            return false;
+        }
+
+        // -------------------------------------------------------------
+        // Decode a single tile (8×8 pixels) from SNES bitplane format
+        // -------------------------------------------------------------
+        private CgxTile DecodeTile(byte[] data , int offset , int bpp)
+        {
+            var tile = new CgxTile();
+
+            switch ( bpp )
+            {
+                case 2:
+                    // 2bpp: 16 bytes per tile
+                    for ( int y = 0 ; y < 8 ; y++ )
+                    {
+                        int rowOffset = offset + (y * 2);
+                        byte p0 = data[rowOffset + 0];
+                        byte p1 = data[rowOffset + 1];
+
+                        for ( int x = 0 ; x < 8 ; x++ )
+                        {
+                            int shift = 7 - x;
+
+                            int bit0 = (p0 >> shift) & 1;
+                            int bit1 = (p1 >> shift) & 1;
+
+                            int value =
+                                (bit0 << 0) |
+                                (bit1 << 1);
+
+                            tile.Pixels[y , x] = (byte)value;
+                        }
+                    }
+                    break;
+
+                case 4:
+                    // 4bpp: 32 bytes per tile
+                    for ( int y = 0 ; y < 8 ; y++ )
+                    {
+                        int rowOffset01 = offset + (y * 2);        // planes 0–1
+                        int rowOffset23 = offset + 16 + (y * 2);   // planes 2–3
+
+                        byte p0 = data[rowOffset01 + 0];
+                        byte p1 = data[rowOffset01 + 1];
+                        byte p2 = data[rowOffset23 + 0];
+                        byte p3 = data[rowOffset23 + 1];
+
+                        for ( int x = 0 ; x < 8 ; x++ )
+                        {
+                            int shift = 7 - x;
+
+                            int bit0 = (p0 >> shift) & 1;
+                            int bit1 = (p1 >> shift) & 1;
+                            int bit2 = (p2 >> shift) & 1;
+                            int bit3 = (p3 >> shift) & 1;
+
+                            int value =
+                                (bit0 << 0) |
+                                (bit1 << 1) |
+                                (bit2 << 2) |
+                                (bit3 << 3);
+
+                            tile.Pixels[y , x] = (byte)value;
+                        }
+                    }
+                    break;
+
+                case 8:
+                    // 8bpp: 64 bytes per tile
+                    for ( int y = 0 ; y < 8 ; y++ )
+                    {
+                        int rowOffset01 = offset + (y * 2);          // planes 0–1
+                        int rowOffset23 = offset + 16 + (y * 2);     // planes 2–3
+                        int rowOffset45 = offset + 32 + (y * 2);     // planes 4–5
+                        int rowOffset67 = offset + 48 + (y * 2);     // planes 6–7
+
+                        byte p0 = data[rowOffset01 + 0];
+                        byte p1 = data[rowOffset01 + 1];
+                        byte p2 = data[rowOffset23 + 0];
+                        byte p3 = data[rowOffset23 + 1];
+                        byte p4 = data[rowOffset45 + 0];
+                        byte p5 = data[rowOffset45 + 1];
+                        byte p6 = data[rowOffset67 + 0];
+                        byte p7 = data[rowOffset67 + 1];
+
+                        for ( int x = 0 ; x < 8 ; x++ )
+                        {
+                            int shift = 7 - x;
+
+                            int bit0 = (p0 >> shift) & 1;
+                            int bit1 = (p1 >> shift) & 1;
+                            int bit2 = (p2 >> shift) & 1;
+                            int bit3 = (p3 >> shift) & 1;
+                            int bit4 = (p4 >> shift) & 1;
+                            int bit5 = (p5 >> shift) & 1;
+                            int bit6 = (p6 >> shift) & 1;
+                            int bit7 = (p7 >> shift) & 1;
+
+                            int value =
+                                (bit0 << 0) |
+                                (bit1 << 1) |
+                                (bit2 << 2) |
+                                (bit3 << 3) |
+                                (bit4 << 4) |
+                                (bit5 << 5) |
+                                (bit6 << 6) |
+                                (bit7 << 7);
+
+                            tile.Pixels[y , x] = (byte)value;
+                        }
+                    }
+                    break;
+
+                default:
+                    throw new Exception( $"Unsupported CGX bit depth: {bpp}" );
             }
 
             return tile;
         }
 
-        // ------------------------------------------------------------
-        // 4bpp tile decode (SNES bitplane format)
-        // ------------------------------------------------------------
-        private byte[,] Decode4bppTile(byte[] data , int offset)
+        /// <summary>
+        /// Reinterprets the loaded bytes when the bit depth is changed.
+        /// Keeps tile count and prefix table; only re-decodes pixels and reapplies PaletteRow.
+        /// </summary>
+        public void ReinterpretBitDepth(CgxFile cgx , int newBpp)
         {
-            var tile = new byte[8, 8];
+            cgx.BitDepth = newBpp;
+            cgx.BytesPerTile = newBpp * 8;
 
-            const int BytesPerRow = 2;
-            const int Plane2Offset = 16; // bytes after plane 0/1
-
-            for ( int row = 0 ; row < 8 ; row++ )
+            for ( int i = 0 ; i < cgx.TileCount ; i++ )
             {
-                int rowOffset = offset + (row * BytesPerRow);
+                var tile = DecodeTile(
+                    cgx.RawTileData,
+                    i * cgx.BytesPerTile,
+                    cgx.BitDepth
+                );
 
-                byte p0 = data[rowOffset + 0];
-                byte p1 = data[rowOffset + 1];
-                byte p2 = data[rowOffset + Plane2Offset + 0];
-                byte p3 = data[rowOffset + Plane2Offset + 1];
-
-                for ( int col = 0 ; col < 8 ; col++ )
+                // Reapply palette row from prefix table (4bpp only)
+                if ( cgx.BitDepth == 4 &&
+                    cgx.TilePrefixTable != null &&
+                    cgx.TilePrefixTable.Length > i )
                 {
-                    int bit = 7 - col;
-
-                    int b0 = (p0 >> bit) & 1;
-                    int b1 = (p1 >> bit) & 1;
-                    int b2 = (p2 >> bit) & 1;
-                    int b3 = (p3 >> bit) & 1;
-
-                    tile[row , col] = (byte)(
-                        b0 |
-                        ( b1 << 1 ) |
-                        ( b2 << 2 ) |
-                        ( b3 << 3 )
-                    );
+                    byte prefix = cgx.TilePrefixTable[i];
+                    tile.PaletteRow = prefix & 0x0F;
                 }
-            }
 
-            return tile;
-        }
-
-        // ------------------------------------------------------------
-        // 8bpp tile decode (SNES bitplane format)
-        // ------------------------------------------------------------
-        private byte[,] Decode8bppTile(byte[] data , int offset)
-        {
-            var tile = new byte[8, 8];
-
-            const int BytesPerRow = 2;
-            const int Plane2Offset = 16;
-            const int Plane4Offset = 32;
-            const int Plane6Offset = 48;
-
-            for ( int row = 0 ; row < 8 ; row++ )
-            {
-                int rowOffset = offset + (row * BytesPerRow);
-
-                byte p0 = data[rowOffset + 0];
-                byte p1 = data[rowOffset + 1];
-                byte p2 = data[rowOffset + Plane2Offset + 0];
-                byte p3 = data[rowOffset + Plane2Offset + 1];
-                byte p4 = data[rowOffset + Plane4Offset + 0];
-                byte p5 = data[rowOffset + Plane4Offset + 1];
-                byte p6 = data[rowOffset + Plane6Offset + 0];
-                byte p7 = data[rowOffset + Plane6Offset + 1];
-
-                for ( int col = 0 ; col < 8 ; col++ )
-                {
-                    int bit = 7 - col;
-
-                    int b0 = (p0 >> bit) & 1;
-                    int b1 = (p1 >> bit) & 1;
-                    int b2 = (p2 >> bit) & 1;
-                    int b3 = (p3 >> bit) & 1;
-                    int b4 = (p4 >> bit) & 1;
-                    int b5 = (p5 >> bit) & 1;
-                    int b6 = (p6 >> bit) & 1;
-                    int b7 = (p7 >> bit) & 1;
-
-                    tile[row , col] = (byte)(
-                        b0 |
-                        ( b1 << 1 ) |
-                        ( b2 << 2 ) |
-                        ( b3 << 3 ) |
-                        ( b4 << 4 ) |
-                        ( b5 << 5 ) |
-                        ( b6 << 6 ) |
-                        ( b7 << 7 )
-                    );
-                }
-            }
-
-            return tile;
-        }
-
-
-
-        // ------------------------------------------------------------
-        // Reinterpret bit depth (editor-side override)
-        // Re-decodes all tiles using the new bit depth.
-        // ------------------------------------------------------------
-        public void ReinterpretBitDepth(CgxFile cgx , int newBitDepth)
-        {
-            // Update bit depth
-            cgx.BitDepth = newBitDepth;
-
-            // Determine bytes per tile
-            int bytesPerTile = newBitDepth switch
-            {
-                2 => TileSize2Bpp,
-                4 => TileSize4Bpp,
-                8 => TileSize8Bpp,
-                _ => TileSize4Bpp
-            };
-
-            cgx.BytesPerTile = bytesPerTile;
-            cgx.TileCount = cgx.RawTileData.Length / bytesPerTile;
-
-            // Recreate tile array
-            cgx.Tiles = new CgxTile[cgx.TileCount];
-
-            for ( int t = 0 ; t < cgx.TileCount ; t++ )
-            {
-                int tileOffset = t * bytesPerTile;
-
-                // Decode pixels using new bit depth
-                byte[,] decodedPixels = DecodeTile(
-            cgx.RawTileData,
-            tileOffset,
-            newBitDepth
-        );
-
-                // Extract raw bytes for inspection
-                byte[] rawBytes = new byte[bytesPerTile];
-                Buffer.BlockCopy( cgx.RawTileData , tileOffset , rawBytes , 0 , bytesPerTile );
-
-                // Safe prefix fetch
-                byte prefix = (t < cgx.TilePrefixTable.Length)
-            ? cgx.TilePrefixTable[t]
-            : (byte)0;
-
-                cgx.Tiles[t] = new CgxTile
-                {
-                    TileIndex = t ,
-                    BitDepth = newBitDepth ,
-                    RawBytes = rawBytes ,
-                    Pixels = decodedPixels ,
-                    PaletteGroup = prefix & PrefixPaletteMask ,
-                    // FlipX / FlipY / Priority left unset until prefix bit layout confirmed
-                };
-            }
-
-            // Resize prefix table if needed
-            if ( cgx.TilePrefixTable == null || cgx.TilePrefixTable.Length != cgx.TileCount )
-            {
-                var prefix = cgx.TilePrefixTable;
-                Array.Resize( ref prefix , cgx.TileCount );
-                cgx.TilePrefixTable = prefix;
+                cgx.Tiles[i] = tile;
             }
         }
-
-
     }
 }

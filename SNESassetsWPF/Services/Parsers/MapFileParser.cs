@@ -1,76 +1,101 @@
 ﻿using System;
+using System.Diagnostics;
 using SNESassetsWPF.Models;
 
 namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// Parses raw MAP bytes into a structured MapFile + MapCells.
-    /// Matches G‑CG‑CAD behaviour.
+    /// Parses a raw MAP file (loaded by MapFileReader)
+    /// into a structured MapFile model.
+    ///
+    /// Responsibilities:
+    ///   • Split header + cell data
+    ///   • Infer width/height (MAP files do NOT store these)
+    ///   • Decode each 16‑bit MapCell
+    ///   • Extract PnlIndex (lower 14 bits)
+    ///
+    /// Does NOT:
+    ///   • Perform rendering
+    ///   • Modify raw bytes
+    ///   • Apply meta‑tile grouping (renderer does that)
     /// </summary>
-    public static class MapParser
+    public static class MapFileParser
     {
-        public static MapFile Parse(byte[] data)
+        public static MapFile Parse(byte[] raw)
         {
-            if ( data == null || data.Length < 0x100 + 2 )
-                throw new ArgumentException( "MAP file too small to be valid." );
+            if ( raw == null || raw.Length < 0x100 )
+                throw new ArgumentException( "MAP file too small to contain header." );
+
+            var map = new MapFile();
 
             // ------------------------------------------------------------
-            // 1. Read header (first 0x100 bytes)
+            // 1. Copy header (0x100 bytes)
             // ------------------------------------------------------------
-            byte[] header = new byte[0x100];
-            Buffer.BlockCopy( data , 0 , header , 0 , 0x100 );
-
-            // Mode 7 flag (bit 7 of header[0])
-            bool mode7 = (header[0] & 0x80) != 0;
+            Array.Copy( raw , 0 , map.Header , 0 , 0x100 );
 
             // ------------------------------------------------------------
-            // 2. MAP entries begin at 0x100
+            // 2. Remaining bytes = 16‑bit MAP cells
+            // ------------------------------------------------------------
+            int cellBytes = raw.Length - 0x100;
+
+            if ( cellBytes % 2 != 0 )
+            {
+                Debug.WriteLine( "[MAP PARSER] Warning: MAP cell data is not aligned to 2 bytes." );
+                // We continue anyway, truncating the last odd byte.
+                cellBytes -= 1;
+            }
+
+            int cellCount = cellBytes / 2;
+
+            map.Cells = new MapCell[cellCount];
+
+            // ------------------------------------------------------------
+            // 3. Infer width/height
+            //
+            // S‑CG‑CAD MAPs are always rectangular.
+            // Common sizes:
+            //   32×32 (1024 cells)
+            //   64×64 (4096 cells)
+            //   128×128 (16384 cells)
+            //
+            // But MAP files do NOT store width/height.
+            // We infer width by assuming the map is square.
+            // If not square, we fall back to 1×N.
+            // ------------------------------------------------------------
+            int inferred = (int)Math.Sqrt(cellCount);
+
+            if ( inferred * inferred == cellCount )
+            {
+                map.Width = inferred;
+                map.Height = inferred;
+            }
+            else
+            {
+                // Fallback: treat as 1×N strip
+                map.Width = cellCount;
+                map.Height = 1;
+
+                Debug.WriteLine( $"[MAP PARSER] Non‑square MAP detected. Using {map.Width}×{map.Height}." );
+            }
+
+            // ------------------------------------------------------------
+            // 4. Parse each 16‑bit MAP entry
             // ------------------------------------------------------------
             int offset = 0x100;
-            int entryBytes = data.Length - offset;
 
-            if ( entryBytes % 2 != 0 )
-                throw new ArgumentException( "MAP tile data is not aligned to 16-bit entries." );
-
-            int entryCount = entryBytes / 2;
-
-            // ------------------------------------------------------------
-            // 3. MAP width is ALWAYS 64 groups (G‑CG‑CAD rule)
-            // ------------------------------------------------------------
-            int mapWidth = 64;
-
-            // Height is computed from total entries
-            int mapHeight = entryCount / mapWidth;
-            if ( mapHeight < 1 )
-                mapHeight = 1;
-
-            var map = new MapFile(mapHeight)
+            for ( int i = 0 ; i < cellCount ; i++ )
             {
-                IsMode7Enabled = mode7
-            };
+                ushort rawValue = (ushort)(raw[offset] | (raw[offset + 1] << 8));
 
-            // Copy header into MapFile
-            Buffer.BlockCopy( header , 0 , map.Header , 0 , 0x100 );
-
-            // ------------------------------------------------------------
-            // 4. Parse MAP entries into MapCells
-            // ------------------------------------------------------------
-            int pos = offset;
-
-            for ( int i = 0 ; i < entryCount ; i++ )
-            {
-                int x = i % mapWidth;
-                int y = i / mapWidth;
-
-                ushort raw = (ushort)((data[pos] << 8) | data[pos + 1]);
-                pos += 2;
-
-                map.Cells[x , y] = new MapCell
+                var cell = new MapCell
                 {
-                    X = x ,
-                    Y = y ,
-                    RawValue = raw
+                    RawValue = rawValue,
+                    PnlIndex = rawValue & 0x3FFF   // lower 14 bits
                 };
+
+                map.Cells[i] = cell;
+
+                offset += 2;
             }
 
             return map;

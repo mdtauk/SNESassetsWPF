@@ -8,16 +8,38 @@ namespace SNESassetsWPF.ViewModels
 {
     public class PaletteViewModel : ViewModelBase
     {
-        public ObservableCollection<PaletteRowViewModel> PaletteRows { get; } = new();
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PALETTE ROWS (UI DATA)
+        // ─────────────────────────────────────────────────────────────
+        //
+        public ObservableCollection<PaletteRowViewModel> PaletteRows { get; }
+            = new ObservableCollection<PaletteRowViewModel>();
 
 
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  FIELDS
+        // ─────────────────────────────────────────────────────────────
+        //
+        private bool _suppressEvents;
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  EVENTS
+        // ─────────────────────────────────────────────────────────────
+        //
         public event Action PaletteChanged;
 
 
-
-        // ---------------------------------------------------------
-        // Selected Palette Row
-        // ---------------------------------------------------------
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  SELECTED PALETTE ROW
+        // ─────────────────────────────────────────────────────────────
+        //
         private int _selectedPaletteRowIndex = -1;
         public int SelectedPaletteRowIndex
         {
@@ -26,15 +48,18 @@ namespace SNESassetsWPF.ViewModels
             {
                 if ( SetProperty( ref _selectedPaletteRowIndex , value ) )
                 {
-                    UpdateCgxPreview();
+                    UpdateActivePalette();
                     PaletteChanged?.Invoke();
                 }
             }
         }
 
-        // ---------------------------------------------------------
-        // Force Single Row
-        // ---------------------------------------------------------
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  FORCE SINGLE ROW
+        // ─────────────────────────────────────────────────────────────
+        //
         private bool _forceSingleRow;
         public bool ForceSingleRow
         {
@@ -43,11 +68,10 @@ namespace SNESassetsWPF.ViewModels
             {
                 if ( SetProperty( ref _forceSingleRow , value ) )
                 {
-                    // If user unchecks → no row selected
                     if ( !value )
                         SelectedPaletteRowIndex = -1;
 
-                    UpdateCgxPreview();
+                    UpdateActivePalette();
                     PaletteChanged?.Invoke();
                 }
             }
@@ -60,48 +84,37 @@ namespace SNESassetsWPF.ViewModels
             set => SetProperty( ref _forceSingleRowEnabled , value );
         }
 
-        // ---------------------------------------------------------
-        // Load Palette
-        // ---------------------------------------------------------
-        public void LoadPalette(ColFile col)
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  LOAD PALETTE (FROM PaletteBuilder)
+        // ─────────────────────────────────────────────────────────────
+        //
+        public void SetPaletteRows(ObservableCollection<PaletteRowViewModel> rows)
         {
             PaletteRows.Clear();
 
-            for ( int p = 0 ; p < 16 ; p++ )
-            {
-                var row = new PaletteRowViewModel();
-
-                for ( int c = 0 ; c < 16 ; c++ )
-                {
-                    var snes = col.RawColors[p, c];
-                    var rgb = col.RgbColors[p, c];
-
-                    row.Colors.Add( new PaletteEntry
-                    {
-                        SnesColor = snes ,
-                        SnesColorString = snes.ToHexPair() ,
-                        RgbColor = rgb ,
-                        RGBColorString = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}"
-                    } );
-                }
-
+            foreach ( var row in rows )
                 PaletteRows.Add( row );
-            }
 
-            // If not forcing a row → no selection
             if ( !ForceSingleRow )
                 SelectedPaletteRowIndex = -1;
+
+            UpdateActivePalette();
+            PaletteChanged?.Invoke();
         }
 
-        // ---------------------------------------------------------
-        // Apply BPP Rules
-        // ---------------------------------------------------------
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  BIT DEPTH RULES
+        // ─────────────────────────────────────────────────────────────
+        //
         public void ApplyBitDepthRules(int bitDepth)
         {
             switch ( bitDepth )
             {
                 case 2:
-                    // 2bpp: always force single row
                     ForceSingleRow = true;
                     ForceSingleRowEnabled = false;
 
@@ -110,7 +123,6 @@ namespace SNESassetsWPF.ViewModels
                     break;
 
                 case 4:
-                    // 4bpp: user can choose
                     ForceSingleRowEnabled = true;
 
                     if ( !ForceSingleRow )
@@ -118,44 +130,54 @@ namespace SNESassetsWPF.ViewModels
                     break;
 
                 case 8:
-                    // 8bpp: cannot force row
                     ForceSingleRow = false;
                     ForceSingleRowEnabled = false;
                     SelectedPaletteRowIndex = -1;
                     break;
             }
+
+            UpdateActivePalette();
+            PaletteChanged?.Invoke();
         }
 
-        // ---------------------------------------------------------
-        // Update CGX Preview
-        // ---------------------------------------------------------
-        private void UpdateCgxPreview()
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  ACTIVE PALETTE (FOR RENDERERS)
+        // ─────────────────────────────────────────────────────────────
+        //
+        public ReadOnlyCollection<PaletteEntry> ActivePalette { get; private set; }
+
+
+        private void UpdateActivePalette()
         {
-            // Prevent crashes when palette is not loaded yet
-            if ( PaletteRows == null || PaletteRows.Count == 0 )
+            if ( PaletteRows.Count == 0 )
+            {
+                ActivePalette = Array.Empty<PaletteEntry>().ToList().AsReadOnly();
                 return;
+            }
 
             if ( ForceSingleRow )
             {
-                // Ensure valid row
                 SelectedPaletteRowIndex = Math.Clamp(
                     SelectedPaletteRowIndex ,
                     0 ,
                     PaletteRows.Count - 1
                 );
 
-                var activePalette = PaletteRows[SelectedPaletteRowIndex].Colors;
-
-                // TODO: Pass activePalette to renderer (via event or callback)
+                ActivePalette = PaletteRows[SelectedPaletteRowIndex]
+                    .Colors
+                    .ToList()
+                    .AsReadOnly();
             }
             else
             {
-                // No row selected
                 SelectedPaletteRowIndex = -1;
 
-                var activePalette = PaletteRows.SelectMany(r => r.Colors);
-
-                // TODO: Pass activePalette to renderer
+                ActivePalette = PaletteRows
+                    .SelectMany( r => r.Colors )
+                    .ToList()
+                    .AsReadOnly();
             }
         }
     }

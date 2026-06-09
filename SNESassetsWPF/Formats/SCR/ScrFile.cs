@@ -1,80 +1,49 @@
-﻿using SNESassetsWPF.Models;
-
-namespace SNESassetsWPF.Formats
+﻿namespace SNESassetsWPF.Models
 {
     /// <summary>
-    /// Represents a fully parsed S‑CG‑CAD SCR tilemap.
-    /// Contains 1, 2, or 4 blocks (32×32 tiles each),
-    /// arranged to form a 32×32, 64×32, 32×64, or 64×64 tilemap.
+    /// Represents an S‑CG‑CAD / H‑CG‑CAD SCR file.
+    ///
+    /// SCR files are *editor‑side* SNES tilemap containers used by S‑CG‑CAD.
+    /// They store 1, 2, or 4 blocks of SNES tilemap data.
+    ///
+    /// A single SCR block is always:
+    ///     • 32 × 32 tilemap entries
+    ///     • 1024 entries per block
+    ///     • each entry = 16‑bit SNES tilemap word
+    ///     • block size = 2048 bytes
+    ///
+    /// Valid SCR tilemap sizes (after trimming editor metadata):
+    ///     0x0800 = 1 block  (32×32)
+    ///     0x1000 = 2 blocks (32×64 or 64×32)
+    ///     0x2000 = 4 blocks (64×64)
+    ///
+    /// Notes:
+    ///   • S‑CG‑CAD often appends editor metadata after the tilemap.
+    ///     H‑CG‑CAD strips this footer and loads only the tilemap portion.
+    ///
+    ///   • SCR files do NOT contain CGX tile graphics.
+    ///     TileIndex refers to a PNL entry, not VRAM.
+    ///
+    ///   • SCR files do NOT contain width/height metadata.
+    ///     BlockCount determines the final dimensions.
     /// </summary>
     public class ScrFile
     {
         /// <summary>
-        /// The raw SCR file bytes.
-        /// Needed so we can re-parse when endian mode changes.
+        /// Raw SCR tilemap bytes (footer removed if present).
         /// </summary>
-        public byte[] RawBytes { get; }
+        public byte[] RawFile { get; set; } = Array.Empty<byte>();
 
         /// <summary>
-        /// Width of the full tilemap in tiles.
+        /// Number of 32×32 blocks in the tilemap.
+        /// Valid values: 1, 2, or 4.
         /// </summary>
-        public int WidthTiles { get; }
+        public int BlockCount { get; set; }
 
         /// <summary>
-        /// Height of the full tilemap in tiles.
+        /// Parsed 32×32 blocks.
+        /// Each block contains exactly 1024 ScrEntry objects.
         /// </summary>
-        public int HeightTiles { get; }
-
-        /// <summary>
-        /// Number of 32×32 blocks in this SCR (1, 2, or 4).
-        /// </summary>
-        public int BlockCount { get; }
-
-        /// <summary>
-        /// The 32×32 blocks that make up the SCR file.
-        /// </summary>
-        public ScrBlock[] Blocks { get; }
-
-        /// <summary>
-        /// Flattened tilemap for convenience.
-        /// Indexed as [row, column] = [y, x].
-        /// </summary>
-        public ScrTile[,] Tiles { get; }
-
-        /// <summary>
-        /// Footer metadata extracted from the SCR file.
-        /// </summary>
-        public byte[] Footer { get; set; }
-
-        /// <summary>
-        /// Visibility stored as an array per block and per tile.
-        /// Visibility[block][tileIndex] = true/false.
-        /// </summary>
-        public bool[][] Visibility { get; set; }
-
-        /// <summary>
-        /// Creates a new SCR file container with fixed dimensions.
-        /// The parser is responsible for populating Blocks and Tiles.
-        /// </summary>
-        public ScrFile(byte[] rawBytes , int widthTiles , int heightTiles , int blockCount)
-        {
-            RawBytes = rawBytes;
-            WidthTiles = widthTiles;
-            HeightTiles = heightTiles;
-            BlockCount = blockCount;
-
-            // Global tilemap
-            Tiles = new ScrTile[heightTiles , widthTiles];
-
-            // 32×32 blocks
-            Blocks = new ScrBlock[blockCount];
-            for ( int i = 0 ; i < blockCount ; i++ )
-                Blocks[i] = new ScrBlock( i );
-        }
-
-        /// <summary>
-        /// Convenience accessor for a tile at (x, y).
-        /// </summary>
-        public ScrTile GetTile(int x , int y) => Tiles[y , x];
+        public ScrBlock[] Blocks { get; set; } = Array.Empty<ScrBlock>();
     }
 }

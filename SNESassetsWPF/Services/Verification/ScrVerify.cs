@@ -1,9 +1,12 @@
 ﻿using System.Diagnostics;
-using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 
 namespace SNESassetsWPF.Services
 {
+    /// <summary>
+    /// Verification helper for SCR files.
+    /// Dumps structural information and the first few entries.
+    /// </summary>
     public static class ScrVerify
     {
         public static void DumpSummary(ScrFile scr)
@@ -17,48 +20,44 @@ namespace SNESassetsWPF.Services
                 return;
             }
 
-            Debug.WriteLine( $"Dimensions: {scr.WidthTiles} × {scr.HeightTiles}" );
-            Debug.WriteLine( $"Blocks:     {scr.BlockCount}" );
-            Debug.WriteLine( $"Footer:     {scr.Footer?.Length ?? 0} bytes" );
-            Debug.WriteLine( $"Raw bytes:  {scr.RawBytes.Length}" );
+            Debug.WriteLine( $"Raw file size: {scr.RawFile.Length} bytes" );
+            Debug.WriteLine( $"Block count:   {scr.BlockCount}" );
+            Debug.WriteLine( $"Blocks array:  {scr.Blocks.Length}" );
 
-            // Visibility stats
-            int totalTiles = scr.WidthTiles * scr.HeightTiles;
-            int visible = 0;
-            int hidden = 0;
-
-            for ( int y = 0 ; y < scr.HeightTiles ; y++ )
+            for ( int b = 0 ; b < scr.Blocks.Length ; b++ )
             {
-                for ( int x = 0 ; x < scr.WidthTiles ; x++ )
+                var block = scr.Blocks[b];
+                int entryCount = block?.Entries?.Length ?? 0;
+
+                Debug.WriteLine( $"  Block {b}: entries={entryCount}" );
+
+                if ( block != null && block.Entries.Length == 32 * 32 )
                 {
-                    if ( scr.Tiles[y , x].Visible )
-                        visible++;
-                    else
-                        hidden++;
+                    DumpFirstEntriesForBlock( b , block );
+                }
+                else
+                {
+                    Debug.WriteLine( $"    Block {b} has unexpected entry count." );
                 }
             }
-
-            Debug.WriteLine( $"Visible tiles: {visible}" );
-            Debug.WriteLine( $"Hidden tiles:  {hidden}" );
-
-            DumpFirstTiles( scr );
         }
 
-        private static void DumpFirstTiles(ScrFile scr)
+        private static void DumpFirstEntriesForBlock(int blockIndex , ScrBlock block)
         {
-            Debug.WriteLine( "First few SCR tiles:" );
+            Debug.WriteLine( $"  First few entries for block {blockIndex}:" );
 
             int count = 0;
 
-            for ( int y = 0 ; y < scr.HeightTiles && count < 10 ; y++ )
+            for ( int y = 0 ; y < 32 && count < 10 ; y++ )
             {
-                for ( int x = 0 ; x < scr.WidthTiles && count < 10 ; x++ )
+                for ( int x = 0 ; x < 32 && count < 10 ; x++ )
                 {
-                    var t = scr.Tiles[y, x];
+                    var e = block.GetEntry(x, y);
 
                     Debug.WriteLine(
-                        $"  [{x},{y}] raw=0x{t.Raw:X4} idx={t.TileIndex} pal={t.PaletteIndex} " +
-                        $"H={t.HFlip} V={t.VFlip} P={t.Priority} vis={t.Visible}"
+                        $"    [{x},{y}] raw=0x{e.RawValue:X4} " +
+                        $"idx={e.TileIndex} pal={e.PaletteRow} " +
+                        $"P={e.Priority} H={e.HFlip} V={e.VFlip}"
                     );
 
                     count++;

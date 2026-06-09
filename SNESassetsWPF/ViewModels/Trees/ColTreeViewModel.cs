@@ -31,9 +31,13 @@ namespace SNESassetsWPF.ViewModels
 
         public void LoadBuiltIn()
         {
+            RootItems.Clear();
+
             BuiltInFileNode = _builtIn.GetBuiltInColFile();
+
             RootItems.Add( BuiltInFileNode );
         }
+
 
         public void SelectBuiltIn()
         {

@@ -1,78 +1,26 @@
-﻿namespace SNESassetsWPF.Models
+﻿namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// Represents a single CGX tile (8×8 pixels).
-    /// Contains raw bytes, decoded pixels, and optional prefix attributes.
+    /// One 8×8 CGX tile.
+    /// Contains ONLY pixel indices decoded from bitplane data.
     /// </summary>
     public class CgxTile
     {
         /// <summary>
-        /// Index of this tile in the CGX file (0–1023).
-        /// </summary>
-        public int TileIndex { get; set; }
-
-        /// <summary>
-        /// Bit depth of this tile (2, 4, or 8 bpp).
-        /// </summary>
-        public int BitDepth { get; set; }
-
-        /// <summary>
-        /// Raw tile bytes (16, 32, or 64 bytes depending on bit depth).
-        /// Essential for debugging and verification.
-        /// </summary>
-        public byte[] RawBytes { get; set; } = Array.Empty<byte>();
-
-        /// <summary>
-        /// Fully decoded 8×8 pixel indices.
+        /// Decoded 8×8 pixel indices (0–255 for 8bpp).
+        /// These are palette indices, not RGB colours.
         /// </summary>
         public byte[,] Pixels { get; set; } = new byte[8 , 8];
 
-        /// <summary>
-        /// Returns a byte index
-        /// </summary>
-        /// <param name="y"></param>
-        /// <param name="x"></param>
-        /// <returns></returns>
-        public byte this[int y , int x]
-        {
-            get => Pixels[y , x];
-            set => Pixels[y , x] = value;
-        }
-
 
         /// <summary>
-        /// Editor-side palette group from prefix table (0–15).
+        /// The 4‑bit palette row (0–15) assigned to this tile, as stored in the CGX
+        /// tile prefix table. This value selects which 16‑colour palette row from the
+        /// COL file should be applied when rendering the tile. Pixel values inside the
+        /// tile are 0–15 (colour‑within‑row); the final colour index is computed as
+        /// (PaletteRow * 16) + PixelValue.
         /// </summary>
-        public int PaletteGroup { get; set; }
-
-        /// <summary>
-        /// Editor-side horizontal flip flag (if prefix encodes it).
-        /// </summary>
-        public bool FlipX { get; set; }
-
-        /// <summary>
-        /// Editor-side vertical flip flag (if prefix encodes it).
-        /// </summary>
-        public bool FlipY { get; set; }
-
-        /// <summary>
-        /// Editor-side priority flag (if prefix encodes it).
-        /// </summary>
-        public int Priority { get; set; }
-
-
-        /// <summary>
-        /// Pixel accessor for renderers.
-        /// Returns the decoded palette index at (x,y).
-        /// </summary>
-        public byte GetPixel(int x , int y)
-        {
-            // Optional safety bounds
-            if ( x < 0 || x >= 8 || y < 0 || y >= 8 )
-                return 0;
-
-            return Pixels[y , x];
-        }
+        public int PaletteRow { get; set; }
 
     }
 }

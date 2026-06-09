@@ -1,80 +1,104 @@
 ﻿using SNESassetsWPF.Models;
-using System;
 
 namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// Represents an S‑CG‑CAD CGX file (designer‑side intermediate format).
-    /// Contains raw tile data, prefix table, metadata, and decoded tiles.
+    /// Represents an S‑CG‑CAD CGX file.
+    /// A CGX file contains ONLY tile graphics:
+    ///  • raw bitplane data
+    ///  • optional prefix table (editor‑side)
+    ///  • optional metadata block (ASCII)
+    ///
+    /// It does NOT contain:
+    ///  • flips
+    ///  • palette row
+    ///  • priority
+    ///  • visibility
+    ///
+    /// H‑CG‑CAD reads CGX exactly this way.
     /// </summary>
     public class CgxFile
     {
         /// <summary>
-        /// Full raw CGX file bytes (for debugging and verification).
+        /// Full raw file bytes (for debugging).
         /// </summary>
         public byte[] RawFile { get; set; } = Array.Empty<byte>();
 
         /// <summary>
-        /// Bit depth of the tile data (2, 4, or 8 bpp).
+        /// Bit depth of the tile data.
+        /// CGX supports 2bpp, 4bpp, or 8bpp.
+        /// Determines bytes per tile:
+        ///  • 2bpp = 16 bytes
+        ///  • 4bpp = 32 bytes
+        ///  • 8bpp = 64 bytes
         /// </summary>
         public int BitDepth { get; set; }
 
         /// <summary>
-        /// Number of tiles in RawTileData.
+        /// Number of tiles in the CGX file.
+        /// H‑CG‑CAD assumes 1024 tiles for full sheets.
         /// </summary>
         public int TileCount { get; set; }
 
         /// <summary>
-        /// Bytes per tile (16, 32, or 64 depending on BitDepth).
+        /// Bytes per tile (derived from BitDepth).
         /// </summary>
         public int BytesPerTile { get; set; }
 
         /// <summary>
-        /// Layout for rendering ONLY.
-        /// CGX does NOT store this — it must be chosen externally.
+        /// Rendering layout ONLY.
+        /// CGX files do NOT store tile sheet width/height.
+        /// H‑CG‑CAD chooses this dynamically.
         /// </summary>
         public int TilesX { get; set; }
-
-        /// <summary>
-        /// Layout for rendering ONLY.
-        /// CGX does NOT store this — it must be chosen externally.
-        /// </summary>
         public int TilesY { get; set; }
 
         /// <summary>
-        /// Trailing S‑CG‑CAD metadata block (ASCII text).
-        /// Not used by SNES; editor‑side only.
+        /// Optional trailing ASCII metadata block.
+        /// Present in S‑CG‑CAD output.
+        /// Ignored by SNES hardware.
         /// </summary>
         public byte[] Metadata { get; set; } = Array.Empty<byte>();
 
         /// <summary>
-        /// Optional prefix table (palette group / tile attributes).
-        /// Length varies (commonly 0x400 for 1024 tiles).
+        /// Optional prefix table.
+        /// Size varies (commonly 0x400 bytes for 1024 tiles).
+        /// Editor‑side only; SNES does not use this.
         /// </summary>
         public byte[] TilePrefixTable { get; set; } = Array.Empty<byte>();
 
         /// <summary>
-        /// Raw tile data starting at byte 0 of the CGX file.
+        /// Raw bitplane tile data.
+        /// Starts at offset 0 of the CGX file.
         /// </summary>
         public byte[] RawTileData { get; set; } = Array.Empty<byte>();
 
         /// <summary>
-        /// Decoded tiles (8×8 pixel indices + editor‑side attributes).
+        /// Decoded tiles.
+        /// Each tile is 8×8 pixel indices (0–255).
+        /// H‑CG‑CAD decodes tiles exactly this way.
         /// </summary>
         public CgxTile[] Tiles { get; set; } = Array.Empty<CgxTile>();
 
-        // ------------------------------------------------------------
-        // Tile inspection helpers
-        // ------------------------------------------------------------
-
+        /// <summary>
+        /// Get decoded tile by index.
+        /// </summary>
         public CgxTile GetTile(int index) => Tiles[index];
 
+        /// <summary>
+        /// Get raw bitplane bytes for a tile.
+        /// Useful for debugging and verification.
+        /// </summary>
         public byte[] GetRawTileBytes(int index)
         {
             int offset = index * BytesPerTile;
             return RawTileData.AsSpan( offset , BytesPerTile ).ToArray();
         }
 
+        /// <summary>
+        /// Convert tile index to sheet position.
+        /// Rendering helper only.
+        /// </summary>
         public (int X , int Y) GetTileSheetPosition(int index)
         {
             int x = index % TilesX;

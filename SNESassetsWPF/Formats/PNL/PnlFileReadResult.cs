@@ -1,24 +1,18 @@
 ﻿namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// Result of reading a PNL file from disk.
-    /// Contains the raw bytes and any error information.
+    /// Result wrapper for PNL file loading.
     /// </summary>
     public class PnlFileReadResult
     {
-        /// <summary>
-        /// True if the file was successfully read.
-        /// </summary>
         public bool Success { get; set; }
+        public string ErrorMessage { get; set; } = string.Empty;
+        public byte[] RawFile { get; set; } = Array.Empty<byte>();
 
-        /// <summary>
-        /// Raw PNL file bytes (header + tile table + flag table).
-        /// </summary>
-        public byte[] Data { get; set; }
+        public static PnlFileReadResult Fail(string msg)
+            => new PnlFileReadResult { Success = false , ErrorMessage = msg };
 
-        /// <summary>
-        /// Error message if reading failed.
-        /// </summary>
-        public string ErrorMessage { get; set; }
+        public static PnlFileReadResult Ok(byte[] raw)
+            => new PnlFileReadResult { Success = true , RawFile = raw };
     }
 }

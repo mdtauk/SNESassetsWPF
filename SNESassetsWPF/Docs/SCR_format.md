@@ -1,227 +1,232 @@
-# S‑CG‑CAD `.SCR` Format (0x2300‑byte Variant)
-A complete, code‑agnostic description of the S‑CG‑CAD screen layout file format.  
-This describes the 0x2300‑byte variant where the metadata/footer begins at offset 0x2000.
+# S‑CG‑CAD `.SCR` Format — Complete Specification  
+Covers **all known SCR variants** used by S‑CG‑CAD and H‑CG‑CAD.
 
-This document explains:
-- The structure of the SCR file
-- How tilemaps are stored
-- How visibility data works
-- How SCR references CGX graphics tiles
-- How SCR references COL palette rows
-- How tile size and palette selection are determined
+Variants included:
 
-No code, no tool references, no implementation details.
+1. **Normal SCR** — 0x2300 bytes (with interleaved visibility mask)  
+2. **F‑Format SCR** — 0x4100 bytes (with expanded per‑tile visibility words)  
+3. **NoClearData SCR** — 0x2100 bytes (no visibility mask; all tiles visible)
+
+Each variant is documented separately to avoid confusion.
 
 ---
 
-## 1. File Overview
+# 1. NORMAL SCR FORMAT (0x2300 bytes)
+This is the most common SCR format and the one used by S‑CG‑CAD Ver1.23.
 
-Total size: 0x2300 bytes (8960 bytes)
+Total size: **0x2300 bytes**
 
-Layout:
+```
++----------------------+ 0x0000
+| Block 0 tilemap      | 0x0800 bytes
++----------------------+ 0x0800
+| Block 1 tilemap      | 0x0800 bytes
++----------------------+ 0x1000
+| Block 2 tilemap      | 0x0800 bytes
++----------------------+ 0x1800
+| Block 3 tilemap      | 0x0800 bytes
++----------------------+ 0x2000
+| Footer / metadata    | 0x0100 bytes
++----------------------+ 0x2100
+| Visibility mask      | 0x0200 bytes
++----------------------+ 0x2300 EOF
+```
 
-    +----------------------+ 0x0000
-    | Block 0 tilemap     | 0x0800 bytes
-    +----------------------+ 0x0800
-    | Block 1 tilemap     | 0x0800 bytes
-    +----------------------+ 0x1000
-    | Block 2 tilemap     | 0x0800 bytes
-    +----------------------+ 0x1800
-    | Block 3 tilemap     | 0x0800 bytes
-    +----------------------+ 0x2000
-    | Footer / metadata   | 0x0100 bytes
-    +----------------------+ 0x2100
-    | Visibility data     | 0x0200 bytes
-    +----------------------+ 0x2300 (EOF)
+## 1.1 Tilemap Blocks (0x0000–0x1FFF)
 
-The screen is composed of **four 32×32 tilemaps**, arranged:
+Each block is **32×32 tiles**, 1024 entries, 2 bytes each.
 
-    +---------+---------+
-    | Block 0 | Block 1 |
-    +---------+---------+
-    | Block 2 | Block 3 |
-    +---------+---------+
+### Tile entry bit layout (Normal format)
 
-Each block is 32×32 tiles = 1024 tiles = 0x800 bytes.
+```
+Bits  0–9  : Tile index (0–1023)
+Bits 10–12 : Palette row (0–7)
+Bit     13 : Priority flag
+Bit     14 : X flip
+Bit     15 : Y flip
+```
 
----
-
-## 2. Tilemap Data (Blocks 0–3)
-
-Each block contains 1024 tile entries.  
-Each tile entry is **2 bytes**, little‑endian.
-
-### 2.1 Tile Entry Bit Layout
-
-    Bits 0–9   : Tile index (0–1023)
-    Bits 10–12 : Palette row index (0–7)
-    Bit 14     : X flip (1 = flip horizontally)
-    Bit 15     : Y flip (1 = flip vertically)
-
-Bits 13 and 14 are unused except for flip.
-
-### 2.2 Tile Order
-
-Tiles are stored row‑by‑row:
-
-    tileIndex = (row * 32) + column
-
-    row:    0..31
-    column: 0..31
+Tile order is row‑major (0..31 rows × 0..31 columns).
 
 ---
 
-## 3. Footer / Metadata (0x2000–0x20FF)
+## 1.2 Footer / Metadata (0x2000–0x20FF)
 
-The footer begins at offset 0x2000 and is 256 bytes long.
+```
+0x2000–0x200F : "NAK1989 S-CG-CAD"
+0x2010–0x2017 : Version string
+0x2018–0x201F : Date string
+```
 
-### 3.1 ASCII Identification
+Metadata fields (offsets relative to 0x2000):
 
-    0x2000–0x200F : "NAK1989 S-CG-CAD"
-    0x2010–0x2017 : Version string (ASCII)
-    0x2018–0x201F : Date string (ASCII)
-
-### 3.2 Metadata Fields
-
-Offsets below are relative to 0x2000:
-
-    0x40 : bitmode     (bit depth indicator)
-    0x41 : mode7       (0 = normal, 1 = Mode 7)
-    0x42 : scr_mode    (0 = 8×8 tiles, 1 = 16×16 tiles)
-    0x43 : chr_bank    (graphics bank index)
-    0x44 : col_bank    (color bank index)
-    0x45 : col_half    (0 = palette colors 0–127, 1 = colors 128–255)
-    0x46 : col_cell    (base palette cell index)
-    0x47–0x48 : clr_chr_no (clear tile number)
-
-### 3.3 Tile Size
-
-    scr_mode = 0 → tile size = 8×8
-    scr_mode = 1 → tile size = 16×16
+```
+0x40 : bitmode
+0x41 : mode7
+0x42 : scr_mode (0 = 8×8, 1 = 16×16)
+0x43 : chr_bank
+0x44 : col_bank
+0x45 : col_half
+0x46 : col_cell
+0x47–0x48 : clr_chr_no
+```
 
 ---
 
-## 4. Visibility Data (0x2100–0x22FF)
+## 1.3 Visibility Mask (0x2100–0x22FF) — **Corrected**
 
-This region controls which tiles are visible.
+This format **does contain visibility data**.
 
-Total size: 0x200 bytes  
-Four blocks × 0x80 bytes each.
+- 4 screens × 1024 bits each  
+- 1024 bits = 128 bytes = 0x80 bytes per screen  
+- Total = 0x200 bytes
 
-### 4.1 Conceptual Layout
+### Physical storage pattern (interleaved)
 
-Each block has:
+For screen `s` (0–3), byte `j` (0–0x7F) is stored at:
 
-    32×32 = 1024 tiles
-    1024 visibility bits
-    1024 bits = 128 bytes = 0x80 bytes
+```
+0x2100
++ ((s & 2) * 0x80)
++ ((s & 1) * 4)
++ (j % 4)
++ ((j / 4) * 8)
+```
 
-Visibility bit meaning:
+### Bit order (reverse)
 
-    1 = tile is visible
-    0 = tile is hidden
+```
+bit[i] = ((byte[i / 8] << (i % 8)) & 0x80) != 0
+```
 
-### 4.2 Visibility Block Locations
+### Meaning
 
-    Block 0: 0x2100–0x217F
-    Block 1: 0x2180–0x21FF
-    Block 2: 0x2200–0x227F
-    Block 3: 0x2280–0x22FF
+```
+1 = tile visible
+0 = tile hidden
+```
 
-### 4.3 Bit Order
-
-Visibility bits are stored in a packed bitstream.  
-The exact byte ordering is not important for understanding the format:  
-each block contains 1024 bits, one per tile, in tile order.
-
----
-
-## 5. Relationship to CGX Graphics
-
-SCR does not contain graphics.  
-It references **tile indices** stored in a CGX file.
-
-CGX contains:
-
-- 1024 tiles for 2bpp
-- 1024 tiles for 4bpp
-- 1024 tiles for 8bpp
-
-Tile index (bits 0–9) selects which CGX tile to draw.
-
-SCR does not modify tile indices.  
-SCR does not contain tile graphics.  
-SCR does not contain tile attributes beyond flip and palette row.
+This mask is used by S‑CG‑CAD and H‑CG‑CAD to hide tiles.
 
 ---
 
-## 6. Relationship to COL Palettes
+# 2. F‑FORMAT SCR (0x4100 bytes)
+This is an alternate SCR format used by some versions of S‑CG‑CAD.
 
-SCR does not contain palette data.  
-It references palette rows stored in a COL file.
+Total size: **0x4100 bytes**
 
-### 6.1 Palette Halves
+```
++----------------------+ 0x0000
+| Block 0 tilemap      | 0x0800 bytes
++----------------------+ 0x0800
+| Block 1 tilemap      | 0x0800 bytes
++----------------------+ 0x1000
+| Block 2 tilemap      | 0x0800 bytes
++----------------------+ 0x1800
+| Block 3 tilemap      | 0x0800 bytes
++----------------------+ 0x2000
+| Footer / metadata    | 0x0100 bytes
++----------------------+ 0x2100
+| F‑format visibilit y | 0x2000 bytes
++----------------------+ 0x4100 EOF
+```
 
-COL contains 256 colors:
+## 2.1 Tilemap Blocks
+Identical to Normal format.
 
-    Half 0: colors 0–127
-    Half 1: colors 128–255
+## 2.2 Footer
+Identical to Normal format.
 
-SCR metadata field:
+## 2.3 F‑Format Visibility (0x2100–0x40FF)
 
-    col_half
+This format uses **2 bytes per tile** for visibility.
 
-selects which half is used.
+For each tile:
 
-### 6.2 Palette Rows
+```
+visibility = (tileWord >> 15) & 1
+```
 
-For 4bpp (most common):
+Meaning:
 
-- Each row = 16 colors
-- There are 8 rows per half
+```
+1 = visible
+0 = hidden
+```
 
-Tile entry bits 10–12 select a row:
-
-    paletteRow = 0–7
-
-Actual palette row start:
-
-    paletteStart = (col_half * 128) + (paletteRow * 16)
-
-### 6.3 2bpp and 8bpp
-
-2bpp:
-
-- Each row = 4 colors
-- paletteStart = (col_half * 128) + (paletteRow * 4)
-
-8bpp:
-
-- Uses all 256 colors
-- paletteRow bits are ignored except for col_half
-
----
-
-## 7. Putting It All Together
-
-To interpret an SCR file:
-
-1. Read the four tilemap blocks (0x0000–0x1FFF)
-2. Read metadata at 0x2000
-3. Determine tile size from scr_mode
-4. Determine palette half from col_half
-5. For each tile:
-    - Read tile index (0–1023)
-    - Read palette row (0–7)
-    - Read flip flags
-6. Read visibility bits at 0x2100–0x22FF
-7. For each tile:
-    - If visibility bit = 0 → tile is hidden
-    - If visibility bit = 1 → tile is drawn
-8. When drawing:
-    - Use CGX tile index to fetch graphics
-    - Use COL palette half + palette row to fetch colors
+Tile order is linear, no interleaving, no bit‑packing.
 
 ---
 
-### Generated by Copilot
+# 3. NOCLEARDATA SCR (0x2100 bytes)
+This is the smallest SCR format.
+
+Total size: **0x2100 bytes**
+
+```
++----------------------+ 0x0000
+| Block 0 tilemap      | 0x0800 bytes
++----------------------+ 0x0800
+| Block 1 tilemap      | 0x0800 bytes
++----------------------+ 0x1000
+| Block 2 tilemap      | 0x0800 bytes
++----------------------+ 0x1800
+| Block 3 tilemap      | 0x0800 bytes
++----------------------+ 0x2000
+| Footer / metadata    | 0x0100 bytes
++----------------------+ 0x2100 EOF
+```
+
+## 3.1 Tilemap Blocks
+Same as Normal format.
+
+## 3.2 Footer
+Same as Normal format.
+
+## 3.3 Visibility
+**No visibility data exists in this format.**
+
+All tiles are implicitly:
+
+```
+visible = true
+```
+
+---
+
+# 4. Summary of Differences
+
+| Variant        | Size     | Visibility Format                          | Notes |
+|----------------|----------|---------------------------------------------|-------|
+| **Normal**     | 0x2300   | 4×0x80 bytes, interleaved, reverse bits     | Most common; used by S‑CG‑CAD Ver1.23 |
+| **F‑Format**   | 0x4100   | 2 bytes per tile (bit 15 = visible)         | Larger; no interleaving |
+| **NoClearData**| 0x2100   | None (all tiles visible)                    | Simplest format |
+
+---
+
+# 5. Variant Detection
+
+You can reliably detect the variant by file size:
+
+```
+0x2300 → Normal
+0x4100 → F‑Format
+0x2100 → NoClearData
+```
+
+---
+
+# 6. Rendering Rules (All Variants)
+
+Regardless of variant:
+
+- Tile index selects CGX tile  
+- Palette row selects COL palette row  
+- col_half selects palette half  
+- scr_mode selects tile size  
+- Flip bits apply normally  
+- Visibility comes from the variant‑specific mask  
+
+---
+
+This is the complete, authoritative SCR specification.

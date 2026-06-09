@@ -1,7 +1,7 @@
 ﻿using SNESassetsWPF.Enums;
-using System;
-using System.Collections.Generic;
-using System.Text;
+
+
+
 
 namespace SNESassetsWPF.Models
 {
@@ -16,11 +16,13 @@ namespace SNESassetsWPF.Models
         /// </summary>
         public bool IsBuiltIn { get; set; } = false;
 
+        /// <summary>
+        /// Parsed asset loaded by AssetLoaderService.
+        /// This will be a LoadedAsset<T> instance.
+        /// </summary>
+        public object LoadedAsset { get; set; }
 
-
-        public FileNode() { }  // keep old usage working
-
-
+        public FileNode() { }
 
         public FileNode(string name , string fullPath , FileType type)
         {
@@ -29,5 +31,4 @@ namespace SNESassetsWPF.Models
             Type = type;
         }
     }
-
 }

@@ -1,47 +1,34 @@
 ﻿using System;
 using System.IO;
 
+
+
+
 namespace SNESassetsWPF.Formats
 {
+    /// <summary>
+    /// Loads a MAP file from disk.
+    /// Parsing is handled by the MapParser.
+    /// </summary>
     public class PnlFileReader
     {
-        /// <summary>
-        /// Reads a PNL file from disk and returns the raw bytes.
-        /// Does not parse or interpret the data.
-        /// </summary>
         public PnlFileReadResult Read(string path)
         {
-            var result = new PnlFileReadResult();
-
             try
             {
                 if ( !File.Exists( path ) )
-                {
-                    result.Success = false;
-                    result.ErrorMessage = "File not found.";
-                    return result;
-                }
+                    return PnlFileReadResult.Fail( "PNL file not found." );
 
-                // Read all bytes
-                byte[] data = File.ReadAllBytes(path);
+                byte[] raw = File.ReadAllBytes(path);
 
-                // Basic sanity check: PNL files are always >= 0x100 header + 0x8000 tile table + 0x8000 flag table
-                if ( data.Length < 0x100 + 0x8000 + 0x8000 )
-                {
-                    result.Success = false;
-                    result.ErrorMessage = "Invalid PNL file: too small.";
-                    return result;
-                }
+                if ( raw.Length < 0x100 + 0x8000 + 0x8000 )
+                    return PnlFileReadResult.Fail( "Invalid PNL file: too small." );
 
-                result.Success = true;
-                result.Data = data;
-                return result;
+                return PnlFileReadResult.Ok( raw );
             }
             catch ( Exception ex )
             {
-                result.Success = false;
-                result.ErrorMessage = ex.Message;
-                return result;
+                return PnlFileReadResult.Fail( ex.Message );
             }
         }
     }

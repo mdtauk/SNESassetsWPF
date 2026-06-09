@@ -1,69 +1,77 @@
-﻿using SNESassetsWPF.Formats;
-using SNESassetsWPF.Models;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using SNESassetsWPF.Formats;
 
-namespace SNESassetsWPF.Services
+public static class PnlVerify
 {
-    public static class PnlVerify
+    /// <summary>
+    /// Dumps a detailed summary of the parsed PNL file to Debug Output.
+    /// </summary>
+    public static void DumpSummary(PnlFile pnl)
     {
-        public static void DumpSummary(PnlFile pnl)
+        if ( pnl == null )
         {
-            Debug.WriteLine( "PNL SUMMARY" );
-            Debug.WriteLine( "-----------" );
-
-            if ( pnl == null )
-            {
-                Debug.WriteLine( "PNL is null — nothing to verify." );
-                return;
-            }
-
-            Debug.WriteLine( $"Total tiles: {pnl.Tiles.Length} (expected 16384)" );
-            Debug.WriteLine( $"Panel layout: 32 × {pnl.Tiles.Length / 32}" );
-            Debug.WriteLine( $"Palette block (ColHalf): {pnl.ColHalf}" );
-            Debug.WriteLine( $"Palette cell  (ColCell): {pnl.ColCell}" );
-            Debug.WriteLine( "" );
-
-            int visible = 0;
-            int hidden = 0;
-
-            foreach ( var t in pnl.Tiles )
-            {
-                if ( t.IsVisible ) visible++;
-                else hidden++;
-            }
-
-            Debug.WriteLine( $"Visible tiles:   {visible}" );
-            Debug.WriteLine( $"Hidden tiles:    {hidden}" );
-            Debug.WriteLine( "" );
-
-            DumpFirstTiles( pnl );
+            Debug.WriteLine( "PNL is null." );
+            return;
         }
 
-        private static void DumpFirstTiles(PnlFile pnl , int count = 16)
+        Debug.WriteLine( "──────────────────────────────────────────────" );
+        Debug.WriteLine( "  PNL SUMMARY" );
+        Debug.WriteLine( "──────────────────────────────────────────────" );
+
+        Debug.WriteLine( $"RawFile.Length     = {pnl.RawFile.Length}" );
+        Debug.WriteLine( $"HeaderSize         = {PnlFile.HeaderSize} (0x{PnlFile.HeaderSize:X})" );
+        Debug.WriteLine( $"EntryCount          = {PnlFile.EntryCount}" );
+        Debug.WriteLine( $"Width × Height     = {PnlFile.Width} × {PnlFile.Height}" );
+        Debug.WriteLine( "" );
+
+        // Validate file size
+        int expectedSize = PnlFile.HeaderSize + 0x8000 + 0x8000;
+
+        Debug.WriteLine( $"Expected Size      = {expectedSize} bytes" );
+        Debug.WriteLine( $"Actual Size        = {pnl.RawFile.Length} bytes" );
+        Debug.WriteLine( $"Size OK            = {pnl.RawFile.Length == expectedSize}" );
+        Debug.WriteLine( "" );
+
+        // Show first few tiles
+        Debug.WriteLine( "First 8 tiles:" );
+        for ( int i = 0 ; i < 8 ; i++ )
         {
-            Debug.WriteLine( "First PNL tiles:" );
-            Debug.WriteLine( "----------------" );
-
-            int max = pnl.Tiles.Length < count ? pnl.Tiles.Length : count;
-
-            for ( int i = 0 ; i < max ; i++ )
-            {
-                var t = pnl.Tiles[i];
-
-                int x = i % 32;
-                int y = i / 32;
-
-                Debug.WriteLine(
-                    $"Tile[{i}] at ({x},{y})  " +
-                    $"vis={( t.IsVisible ? "Y" : "N" )}  " +
-                    $"idx={t.TileIndex}  " +
-                    $"pal={t.PaletteRow}  " +
-                    $"H={t.HFlip}  V={t.VFlip}  " +
-                    $"raw=0x{t.RawAttributeWord:X4}"
-                );
-            }
-
-            Debug.WriteLine( "--------------------------------------------" );
+            var t = pnl.Entries[i];
+            Debug.WriteLine(
+                $"[{i:D4}] Attr=0x{t.RawAttributeWord:X4}  " +
+                $"Flag=0x{t.RawFlagWord:X4}  " +
+                $"Idx={t.TileIndex:D4}  Pal={t.PaletteRow}  " +
+                $"H={t.HFlip} V={t.VFlip} P={t.Priority}  " +
+                $"Present={t.IsPresent}"
+            );
         }
+
+        Debug.WriteLine( "" );
+
+        // Show last few tiles
+        Debug.WriteLine( "Last 8 tiles:" );
+        for ( int i = PnlFile.EntryCount - 8 ; i < PnlFile.EntryCount ; i++ )
+        {
+            var t = pnl.Entries[i];
+            Debug.WriteLine(
+                $"[{i:D4}] Attr=0x{t.RawAttributeWord:X4}  " +
+                $"Flag=0x{t.RawFlagWord:X4}  " +
+                $"Idx={t.TileIndex:D4}  Pal={t.PaletteRow}  " +
+                $"H={t.HFlip} V={t.VFlip} P={t.Priority}  " +
+                $"Present={t.IsPresent}"
+            );
+        }
+
+        Debug.WriteLine( "" );
+
+        // Count present tiles
+        int presentCount = 0;
+        foreach ( var t in pnl.Entries )
+            if ( t.IsPresent )
+                presentCount++;
+
+        Debug.WriteLine( $"Present tiles      = {presentCount} / {PnlFile.EntryCount}" );
+        Debug.WriteLine( "──────────────────────────────────────────────" );
+        Debug.WriteLine( "" );
     }
 }

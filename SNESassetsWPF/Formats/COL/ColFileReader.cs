@@ -7,42 +7,33 @@ using System.Linq;
 using System.Text;
 using System.Windows.Media;
 
+
+
+
 namespace SNESassetsWPF.Formats
 {
+    /// <summary>
+    /// Loads a COL file from disk.
+    /// Parsing is handled by the MapParser.
+    /// </summary>
     public class ColFileReader
     {
         public ColFileReadResult Read(string path)
         {
-            var result = new ColFileReadResult();
-
             try
             {
-                var bytes = File.ReadAllBytes(path);
+                if ( !File.Exists( path ) )
+                    return ColFileReadResult.Fail( "COL file not found." );
 
-                if ( bytes.Length < 0x200 )
-                {
-                    result.IsValid = false;
-                    result.ErrorMessage = "COL file too small.";
-                    return result;
-                }
-
-                // First 0x200 bytes = 256 colours (16 palettes × 16 colours)
-                result.RawColorData = bytes.AsSpan( 0 , 0x200 ).ToArray();
-
-                // Remaining bytes = metadata (32 rows)
-                if ( bytes.Length > 0x200 )
-                    result.RawMetadata = bytes.AsSpan( 0x200 ).ToArray();
-
-                result.IsValid = true;
+                byte[] raw = File.ReadAllBytes(path);
+                return ColFileReadResult.Ok( raw );
             }
             catch ( Exception ex )
             {
-                result.IsValid = false;
-                result.ErrorMessage = ex.Message;
+                return ColFileReadResult.Fail( ex.Message );
             }
-
-            return result;
         }
-    }
 
+    }
 }
+

@@ -1,17 +1,19 @@
 ﻿using SNESassetsWPF.Enums;
 using SNESassetsWPF.Formats;
+using SNESassetsWPF.Models;
 using SNESassetsWPF.Rendering;
-using SNESassetsWPF.Services;
-using System.Diagnostics;
+using System;
+using System.Collections.ObjectModel;
 using System.Windows.Media.Imaging;
 
 namespace SNESassetsWPF.ViewModels
 {
     public class ScrViewerViewModel : ViewModelBase
     {
-        // ─────────────────────────────────────────────────────────────
-        // SCR / CGX / COL references
-        // ─────────────────────────────────────────────────────────────
+        public PaletteViewModel Palette { get; }
+
+        public ReadOnlyCollection<PaletteEntry> ActivePalette =>
+            Palette?.ActivePalette;
 
         private ScrFile _scrFile;
         public ScrFile ScrFile
@@ -21,8 +23,6 @@ namespace SNESassetsWPF.ViewModels
             {
                 _scrFile = value;
                 OnPropertyChanged();
-
-                SelectedDebugMode = ScrDebugMode.None;
                 RenderScr();
             }
         }
@@ -51,27 +51,10 @@ namespace SNESassetsWPF.ViewModels
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
-        // Palette source toggle
-        // ─────────────────────────────────────────────────────────────
-
-        private bool _useScrPaletteRow = true;
-        public bool UseScrPaletteRow
-        {
-            get => _useScrPaletteRow;
-            set
-            {
-                _useScrPaletteRow = value;
-                OnPropertyChanged();
-                RenderScr();
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────
-        // Debug mode
-        // ─────────────────────────────────────────────────────────────
-
-        private ScrDebugMode _selectedDebugMode = ScrDebugMode.TileIndex;
+        // ─────────────────────────────────────────────
+        // Debug Mode (enum-based)
+        // ─────────────────────────────────────────────
+        private ScrDebugMode _selectedDebugMode = ScrDebugMode.None;
         public ScrDebugMode SelectedDebugMode
         {
             get => _selectedDebugMode;
@@ -83,7 +66,7 @@ namespace SNESassetsWPF.ViewModels
             }
         }
 
-        public static ScrDebugMode[] DebugModes { get; } =
+        public ScrDebugMode[] DebugModes { get; } =
         {
             ScrDebugMode.None,
             ScrDebugMode.TileIndex,
@@ -92,10 +75,9 @@ namespace SNESassetsWPF.ViewModels
             ScrDebugMode.Priority
         };
 
-        // ─────────────────────────────────────────────────────────────
-        // Zoom + Grid
-        // ─────────────────────────────────────────────────────────────
-
+        // ─────────────────────────────────────────────
+        // Zoom, Visibility + Grid
+        // ─────────────────────────────────────────────
         private int _zoomLevel = 1;
         public int ZoomLevel
         {
@@ -108,17 +90,24 @@ namespace SNESassetsWPF.ViewModels
                 _zoomLevel = value;
                 OnPropertyChanged();
                 OnPropertyChanged( nameof( IsGridToggleEnabled ) );
+
+                if ( _zoomLevel == 1 )
+                    ShowGrid = false;
+
                 RenderScr();
             }
         }
 
-        public int ZoomPercent
+
+        private bool _showInvisible;
+        public bool ShowInvisible
         {
-            get => _zoomLevel * 100;
+            get => _showInvisible;
             set
             {
-                ZoomLevel = value / 100;
+                _showInvisible = value;
                 OnPropertyChanged();
+                RenderScr();
             }
         }
 
@@ -136,139 +125,67 @@ namespace SNESassetsWPF.ViewModels
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
-        // Bitmap + RenderResult
-        // ─────────────────────────────────────────────────────────────
-
-        private WriteableBitmap _bitmap;
-        public WriteableBitmap Bitmap
+        // ─────────────────────────────────────────────
+        // Output bitmap
+        // ─────────────────────────────────────────────
+        private WriteableBitmap _scrBitmap;
+        public WriteableBitmap ScrBitmap
         {
-            get => _bitmap;
+            get => _scrBitmap;
             private set
             {
-                _bitmap = value;
+                _scrBitmap = value;
                 OnPropertyChanged();
             }
         }
 
-        private RenderResult _lastRenderResult;
-        public RenderResult LastRenderResult => _lastRenderResult;
-
-
-        // ─────────────────────────────────────────────────────────────
-        // Visibility Toggle
-        // ─────────────────────────────────────────────────────────────
-
-        private bool _showInvisibleTiles = false;
-        public bool ShowInvisibleTiles
+        public ScrViewerViewModel(PaletteViewModel palette)
         {
-            get => _showInvisibleTiles;
-            set
-            {
-                _showInvisibleTiles = value;
-                OnPropertyChanged();
-                RenderScr();
-            }
+            Palette = palette;
+            Palette.PaletteChanged += RenderScr;
         }
 
-
-        // ─────────────────────────────────────────────────────────────
-        // Constructor
-        // ─────────────────────────────────────────────────────────────
-
-        public ScrViewerViewModel()
-        {
-            SelectedDebugMode = ScrDebugMode.None;
-        }
-
-        // ─────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────
         // Rendering
-        // ─────────────────────────────────────────────────────────────
-
-        private void RenderScr()
+        // ─────────────────────────────────────────────
+        public void RenderScr()
         {
             if ( ScrFile == null )
+            {
+                ScrBitmap = null;
                 return;
-
-            int zoomFactor = ZoomLevel;
-            bool enableGrid = ShowGrid && zoomFactor >= 2;
-
-            RenderResult result;
-
-            bool useDebug = SelectedDebugMode != ScrDebugMode.None;
-
-            if ( useDebug )
-            {
-                var renderer = new ScrDebugRenderer();
-                result = renderer.Render(
-                    ScrFile ,
-                    SelectedDebugMode ,
-                    zoomFactor ,
-                    enableGrid ,
-                    ShowInvisibleTiles
-                );
-            }
-            else
-            {
-                if ( CgxFile == null || ColFile == null )
-                    return;
-
-                var renderer = new ScrRenderer(
-                    ScrFile,
-                    CgxFile,
-                    ColFile,
-                    enableGrid,
-                    ShowInvisibleTiles
-                );
-
-                result = renderer.Render( zoomFactor );
             }
 
-            _lastRenderResult = result;
-            Bitmap = BitmapFactory.FromRenderResult( result );
+            var result = ScrRenderer.Render(
+                ScrFile,
+                CgxFile,        // may be null → renderer handles fallback
+                ColFile,        // may be null → renderer handles fallback
+                zoom: ZoomLevel,
+                showGrid: ShowGrid,
+                showInvisible: ShowInvisible ,
+                debugMode: SelectedDebugMode
+            );
+
+            ScrBitmap = BitmapFactory.FromRenderResult( result );
         }
 
-        // ─────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────
         // PNG Export
-        // ─────────────────────────────────────────────────────────────
-
-        public void SavePng(string path)
+        // ─────────────────────────────────────────────
+        public void ExportPng(string path , int zoom)
         {
             if ( ScrFile == null )
                 return;
 
-            int zoomFactor = ZoomLevel;
-
-            RenderResult result;
-
-            bool useDebug = SelectedDebugMode != ScrDebugMode.None;
-
-            if ( useDebug )
-            {
-                var renderer = new ScrDebugRenderer();
-                result = renderer.Render(
-                    ScrFile ,
-                    SelectedDebugMode ,
-                    zoomFactor ,
-                    showGrid: false ,
-                    ShowInvisibleTiles
-                );
-            }
-            else
-            {
-                if ( CgxFile == null || ColFile == null )
-                    return;
-
-                var renderer = new ScrRenderer(
-                    ScrFile,
-                    CgxFile,
-                    ColFile,
-                    showGrid: false,
-                    ShowInvisibleTiles
-                );
-
-                result = renderer.Render( zoomFactor );
-            }
+            var result = ScrRenderer.Render(
+                ScrFile,
+                CgxFile,
+                ColFile,
+                zoom: zoom,
+                showGrid: false,
+                showInvisible: ShowInvisible ,
+                debugMode: SelectedDebugMode
+            );
 
             BitmapFactory.SavePng( result , path );
         }

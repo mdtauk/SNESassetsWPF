@@ -1,53 +1,69 @@
-﻿using SNESassetsWPF.Formats;
+﻿using System;
 
-public class PnlFileParser
+namespace SNESassetsWPF.Formats
 {
-    public PnlFile Parse(byte[] data)
+    /// <summary>
+    /// Parses an S‑CG‑CAD PNL file.
+    ///
+    /// Binary layout:
+    ///   0x0000–0x00FF : 256‑byte header
+    ///   0x0100–0x80FF : 0x8000‑byte attribute table (16384 × 2 bytes)
+    ///   0x8100–0x100FF: 0x8000‑byte flag table      (16384 × 2 bytes)
+    ///
+    /// All 16‑bit values are BIG‑ENDIAN.
+    /// Tilemap is always 32×512 tiles.
+    /// </summary>
+    public static class PnlFileParser
     {
-        if ( data == null || data.Length < 0x10100 )
-            throw new ArgumentException( "Invalid PNL data: wrong size." );
+        private const int HeaderSize      = 0x100;
+        private const int AttributeOffset = 0x100;
+        private const int AttributeSize   = 0x8000;   // 32768 bytes
+        private const int FlagOffset      = AttributeOffset + AttributeSize;
+        private const int FlagSize        = 0x8000;   // 32768 bytes
 
-        var pnl = new PnlFile();
-
-        // ---------------------------------------------------------
-        // 1. Read header (first 0x100 bytes)
-        // ---------------------------------------------------------
-        byte[] header = new byte[0x100];
-        Buffer.BlockCopy( data , 0 , header , 0 , 0x100 );
-
-        // Palette block selectors
-        pnl.ColHalf = header[0x65];
-        pnl.ColCell = header[0x66];
-
-        // Group size (pattern size)
-        pnl.GroupWidth = 1 << ( header[0x69] & 0x1F );
-        pnl.GroupHeight = 1 << ( header[0x6A] & 0x1F );
-
-        // ---------------------------------------------------------
-        // 2. Allocate tiles
-        // ---------------------------------------------------------
-        pnl.Tiles = new PnlTile[0x4000]; // 16384 tiles
-
-        int attrBase  = 0x100;
-        int clearBase = 0x8100;
-
-        // ---------------------------------------------------------
-        // 3. Parse all 16384 tiles
-        // ---------------------------------------------------------
-        for ( int i = 0 ; i < 0x4000 ; i++ )
+        public static PnlFile Parse(byte[] raw)
         {
-            int pos = attrBase + (i * 2);
-            ushort rawAttr = (ushort)((data[pos] << 8) | data[pos + 1]);
+            if ( raw == null )
+                throw new ArgumentNullException( nameof( raw ) );
 
-            bool visible = data[clearBase + (i * 2)] != 0;
+            if ( raw.Length < HeaderSize + AttributeSize + FlagSize )
+                throw new InvalidOperationException( "PNL file is too small or truncated." );
 
-            pnl.Tiles[i] = new PnlTile
+            var pnl = new PnlFile
             {
-                RawAttributeWord = rawAttr ,
-                IsVisible = visible
+                RawFile = raw
             };
-        }
 
-        return pnl;
+            // ───────────────────────────────────────────────
+            // 1. Copy header
+            // ───────────────────────────────────────────────
+            Buffer.BlockCopy( raw , 0 , pnl.Header , 0 , HeaderSize );
+
+            // ───────────────────────────────────────────────
+            // 2. Parse all 16384 tiles
+            // ───────────────────────────────────────────────
+            for ( int i = 0 ; i < PnlFile.EntryCount ; i++ )
+            {
+                var tile = new PnlEntry();
+
+                // -----------------------------
+                // Read attribute word (big‑endian)
+                // -----------------------------
+                int attrPos = AttributeOffset + (i * 2);
+                ushort rawAttr = (ushort)((raw[attrPos] << 8) | raw[attrPos + 1]);
+                tile.RawAttributeWord = rawAttr;
+
+                // -----------------------------
+                // Read flag word (big‑endian)
+                // -----------------------------
+                int flagPos = FlagOffset + (i * 2);
+                ushort rawFlag = (ushort)((raw[flagPos] << 8) | raw[flagPos + 1]);
+                tile.RawFlagWord = rawFlag;
+
+                pnl.Entries[i] = tile;
+            }
+
+            return pnl;
+        }
     }
 }
