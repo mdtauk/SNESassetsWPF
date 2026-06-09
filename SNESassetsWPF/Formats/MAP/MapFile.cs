@@ -69,11 +69,16 @@ namespace SNESassetsWPF.Models
         /// Defined by S‑CG‑CAD in Header[0x69]:
         ///     metaWidth = 1 << (Header[0x69] & 0x1F)
         ///
-        /// This controls how many PNL entries form one MAP cell.
+        /// This does NOT change the MAP file structure.
+        /// Instead, it defines how many PNL tiles form one MAP cell.
+        ///
         /// Example:
-        ///     exponent = 1 → metaWidth = 2
-        ///     exponent = 2 → metaWidth = 4
+        ///     exponent = 2 → metaWidth  = 4  (32×32 meta‑tile)
+        ///
+        /// Rendering a MAP cell requires fetching a metaWidth × metaHeight
+        /// block of PNL entries starting at the cell’s PnlIndex.
         /// </summary>
+
         public int MetaWidth => 1 << ( Header[0x69] & 0x1F );
 
         /// <summary>
@@ -82,9 +87,19 @@ namespace SNESassetsWPF.Models
         /// Defined by S‑CG‑CAD in Header[0x6A]:
         ///     metaHeight = 1 << (Header[0x6A] & 0x1F)
         ///
-        /// This controls how many PNL entries form one MAP cell.
+        /// This does NOT change the MAP file structure.
+        /// Instead, it defines how many PNL tiles form one MAP cell vertically.
+        ///
+        /// Example:
+        ///     exponent = 0 → metaHeight = 1  (8×8 tile)
+        ///     exponent = 1 → metaHeight = 2  (16×16 meta‑tile)
+        ///     exponent = 2 → metaHeight = 4  (32×32 meta‑tile)
+        ///
+        /// Rendering a MAP cell requires fetching a metaWidth × metaHeight
+        /// block of PNL entries starting at the cell’s PnlIndex.
         /// </summary>
         public int MetaHeight => 1 << ( Header[0x6A] & 0x1F );
+
 
         /// <summary>
         /// Returns the MapCell at (x,y).

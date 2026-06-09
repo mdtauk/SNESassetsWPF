@@ -41,15 +41,9 @@ namespace SNESassetsWPF.Rendering
 
             bool hasCgxCol = (cgx != null && col != null);
 
-            // Group size for debug pattern
-            int groupW = 2;
-            int groupH = 2;
-
-            if ( map != null )
-            {
-                groupW = Math.Max( 1 , map.Width );
-                groupH = Math.Max( 1 , map.Height );
-            }
+            // Group size for debug pattern — ALWAYS from PNL
+            int groupW = pnl.MetaWidth;
+            int groupH = pnl.MetaHeight;
 
             // Collect debug patterns
             List<DebugPattern> patterns = showDebug
@@ -109,8 +103,8 @@ namespace SNESassetsWPF.Rendering
                     buffer ,
                     width ,
                     height ,
-                    tintColor: Color.FromArgb(255,128,128,128) ,
-                    opacity: 0.3
+                    tintColor: Color.FromRgb( 128 , 128 , 128) ,
+                    opacity: 0.4
                 );
 
                 // 3. Pattern boxes
@@ -148,11 +142,18 @@ namespace SNESassetsWPF.Rendering
         {
             var list = new List<DebugPattern>();
 
+            // Ensure group sizes are valid
+            groupW = Math.Max( 1 , groupW );
+            groupH = Math.Max( 1 , groupH );
+
+            int groupsAcross = PnlFile.Width / groupW;
+            int groupsDown   = PnlFile.Height / groupH;
+
             for ( int gy = 0 ; gy < PnlFile.Height ; gy += groupH )
             {
                 for ( int gx = 0 ; gx < PnlFile.Width ; gx += groupW )
                 {
-                    int patternIndex = (gy / groupH) * (PnlFile.Width / groupW) + (gx / groupW);
+                    int patternIndex = (gy / groupH) * groupsAcross + (gx / groupW);
                     Color c = DebugColors.GetColorForPnlTile(patternIndex);
 
                     list.Add( new DebugPattern
@@ -161,7 +162,7 @@ namespace SNESassetsWPF.Rendering
                         GridY = gy ,
                         WidthInTiles = groupW ,
                         HeightInTiles = groupH ,
-                        OuterColor = Color.FromArgb(255,128,128,128) ,
+                        OuterColor = Color.FromArgb( 255 , 128 , 128 , 128 ) ,
                         InnerColor = c ,
                         OuterBorderThickness = 1 ,
                         InnerBorderThickness = 1
@@ -171,6 +172,7 @@ namespace SNESassetsWPF.Rendering
 
             return list;
         }
+
 
         // ─────────────────────────────────────────────
         // Tile rendering helpers

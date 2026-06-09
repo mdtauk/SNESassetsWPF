@@ -159,7 +159,11 @@ namespace SNESassetsWPF.Services
                 }
 
                 var map = MapFileParser.Parse(readResult.RawFile);
+
+                MapVerify.DumpSummary( map );
+
                 return new LoadedAsset<MapFile>( path , map );
+
             }
             catch ( Exception ex )
             {

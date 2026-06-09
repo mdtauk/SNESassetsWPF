@@ -40,22 +40,35 @@ namespace SNESassetsWPF.Formats
             Buffer.BlockCopy( raw , 0 , pnl.Header , 0 , HeaderSize );
 
             // ───────────────────────────────────────────────
-            // 2. Parse all 16384 tiles
+            // 2. Decode meta‑tile size from header
+            //    S‑CG‑CAD stores meta‑tile exponents at:
+            //      0x69 → width exponent
+            //      0x6A → height exponent
+            //    Actual size = 1 << exponent
+            // ───────────────────────────────────────────────
+            byte mw = pnl.Header[0x69];
+            byte mh = pnl.Header[0x6A];
+
+            pnl.MetaWidth = 1 << ( mw & 0x1F );
+            pnl.MetaHeight = 1 << ( mh & 0x1F );
+
+            // Safety clamp (should never happen)
+            if ( pnl.MetaWidth < 1 ) pnl.MetaWidth = 1;
+            if ( pnl.MetaHeight < 1 ) pnl.MetaHeight = 1;
+
+            // ───────────────────────────────────────────────
+            // 3. Parse all 16384 tiles
             // ───────────────────────────────────────────────
             for ( int i = 0 ; i < PnlFile.EntryCount ; i++ )
             {
                 var tile = new PnlEntry();
 
-                // -----------------------------
-                // Read attribute word (big‑endian)
-                // -----------------------------
+                // Attribute word (big‑endian)
                 int attrPos = AttributeOffset + (i * 2);
                 ushort rawAttr = (ushort)((raw[attrPos] << 8) | raw[attrPos + 1]);
                 tile.RawAttributeWord = rawAttr;
 
-                // -----------------------------
-                // Read flag word (big‑endian)
-                // -----------------------------
+                // Flag word (big‑endian)
                 int flagPos = FlagOffset + (i * 2);
                 ushort rawFlag = (ushort)((raw[flagPos] << 8) | raw[flagPos + 1]);
                 tile.RawFlagWord = rawFlag;

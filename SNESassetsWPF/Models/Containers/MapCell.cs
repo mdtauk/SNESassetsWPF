@@ -5,11 +5,11 @@
     ///
     /// RawValue:
     ///   • Lower 14 bits = PNL index (0–16383)
-    ///   • Upper 2 bits  = unused by S‑CG‑CAD (H‑CG‑CAD preserves them)
+    ///   • Upper 2 bits are reserved (always 0 in S‑CG‑CAD output)
     ///
     /// PnlIndex:
     ///   • Extracted from RawValue & 0x3FFF
-    ///   • Points into the 128×128 PNL workspace
+    ///   • Points into the 32×512 PNL workspace (16384 entries)
     /// </summary>
     public class MapCell
     {

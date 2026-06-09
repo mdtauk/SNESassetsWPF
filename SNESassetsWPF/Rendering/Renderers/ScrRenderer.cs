@@ -29,7 +29,6 @@ namespace SNESassetsWPF.Rendering
                 };
             }
 
-
             if ( zoom < 1 )
                 zoom = 1;
 
@@ -127,13 +126,31 @@ namespace SNESassetsWPF.Rendering
                     buffer ,
                     width ,
                     height ,
-                    Color.FromArgb( 255 , 128 , 128 , 128 ) ,
-                    0.25
+                    Color.FromRgb( 128 , 128 , 128 ) ,
+                    0.4
                 );
             }
 
             // ─────────────────────────────────────────────
-            // 3. Debug patterns + glyphs (per tile)
+            // 3. Debug patterns (per CGX tile)
+            // ─────────────────────────────────────────────
+            if ( debugMode != ScrDebugMode.None )
+            {
+                var patterns = BuildScrTilePatterns(widthTiles, heightTiles);
+
+                DebugOverlay.DrawScrPatterns(
+                    buffer ,
+                    width ,
+                    height ,
+                    patterns ,
+                    zoom ,
+                    spacing ,
+                    widthTiles
+                );
+            }
+
+            // ─────────────────────────────────────────────
+            // 4. Debug glyphs (per tile)
             // ─────────────────────────────────────────────
             if ( debugMode != ScrDebugMode.None )
             {
@@ -161,17 +178,6 @@ namespace SNESassetsWPF.Rendering
                         int tilePixelX = (tileX * TileWidth  * zoom) + (tileX * spacing);
                         int tilePixelY = (tileY * TileHeight * zoom) + (tileY * spacing);
 
-                        // Pattern overlay
-                        DrawPatternForTile(
-                            buffer ,
-                            width ,
-                            height ,
-                            tilePixelX ,
-                            tilePixelY ,
-                            zoom
-                        );
-
-                        // Glyphs
                         switch ( debugMode )
                         {
                             case ScrDebugMode.TileIndex:
@@ -193,7 +199,6 @@ namespace SNESassetsWPF.Rendering
                                             glyphScale ,
                                             glyph
                                         );
-
                                     }
                                     break;
                                 }
@@ -241,21 +246,21 @@ namespace SNESassetsWPF.Rendering
             }
 
             // ─────────────────────────────────────────────
-            // 4. Grid (on top)
+            // 5. Grid (on top) – currently disabled
             // ─────────────────────────────────────────────
             if ( showGrid && zoom >= 2 )
             {
-                DebugOverlay.DrawGrid(
-                    buffer ,
-                    width ,
-                    height ,
-                    TileWidth * zoom ,
-                    TileHeight * zoom ,
-                    zoom ,
-                    spacing ,
-                    widthTiles ,
-                    heightTiles
-                );
+                // DebugOverlay.DrawGrid(
+                //     buffer,
+                //     width,
+                //     height,
+                //     TileWidth * zoom,
+                //     TileHeight * zoom,
+                //     zoom,
+                //     spacing,
+                //     widthTiles,
+                //     heightTiles
+                // );
             }
 
             return new RenderResult
@@ -300,39 +305,37 @@ namespace SNESassetsWPF.Rendering
         }
 
         // ─────────────────────────────────────────────
-        // Per-tile pattern (diagonal stripes)
+        // Per-tile debug patterns (borders via DebugColors)
         // ─────────────────────────────────────────────
-        private static void DrawPatternForTile(
-            byte[] buffer ,
-            int width ,
-            int height ,
-            int px ,
-            int py ,
-            int zoom)
+        private static List<DebugPattern> BuildScrTilePatterns(int widthTiles , int heightTiles)
         {
-            int w = TileWidth * zoom;
-            int h = TileHeight * zoom;
+            var list = new List<DebugPattern>();
 
-            for ( int y = 0 ; y < h ; y++ )
+            int groupsAcross = widthTiles;
+            int groupsDown   = heightTiles;
+
+            for ( int y = 0 ; y < heightTiles ; y++ )
             {
-                for ( int x = 0 ; x < w ; x++ )
+                for ( int x = 0 ; x < widthTiles ; x++ )
                 {
-                    if ( ( ( x + y ) & 3 ) != 0 )
-                        continue;
+                    int patternIndex = y * groupsAcross + x;
+                    Color c = DebugColors.GetColorForPnlTile(patternIndex);
 
-                    int dx = px + x;
-                    int dy = py + y;
-
-                    if ( dx < 0 || dx >= width || dy < 0 || dy >= height )
-                        continue;
-
-                    int idx = (dy * width + dx) * 4;
-
-                    buffer[idx + 0] = (byte)( buffer[idx + 0] / 2 );
-                    buffer[idx + 1] = (byte)( buffer[idx + 1] / 2 );
-                    buffer[idx + 2] = (byte)( buffer[idx + 2] / 2 );
+                    list.Add( new DebugPattern
+                    {
+                        GridX = x ,
+                        GridY = y ,
+                        WidthInTiles = 1 ,
+                        HeightInTiles = 1 ,
+                        OuterColor = Color.FromRgb( 128 , 128 , 128 ) ,
+                        InnerColor = c ,
+                        OuterBorderThickness = 1 ,
+                        InnerBorderThickness = 1
+                    } );
                 }
             }
+
+            return list;
         }
 
         // ─────────────────────────────────────────────
@@ -412,13 +415,11 @@ namespace SNESassetsWPF.Rendering
             return col.GetColor( row , colIdx );
         }
 
-
         public static RenderResult Empty { get; } = new RenderResult
         {
             Buffer = Array.Empty<byte>() ,
             Width = 0 ,
             Height = 0
         };
-
     }
 }
