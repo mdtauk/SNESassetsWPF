@@ -2,6 +2,7 @@
 using SNESassetsWPF.Models;
 using System;
 using System.Diagnostics;
+using static SNESassetsWPF.Formats.ColFileReadResult;
 
 
 
@@ -29,7 +30,37 @@ namespace SNESassetsWPF.Services
                     return null;
                 }
 
-                var col = ColFileParser.Parse(readResult);   // ← use the reader’s slice, not RawFile
+                // -------------------------------------------------
+                // 1. Classify the COL file
+                // -------------------------------------------------
+                ColFileParser.ClassifyColStructure( readResult );
+
+                // -------------------------------------------------
+                // 2. Parse based on classification
+                // -------------------------------------------------
+                ColFile col;
+
+                switch ( readResult.Format )
+                {
+                    case ColFormatType.Valid:
+                        col = ColFileParser.ParseStrict( readResult );
+                        break;
+
+                    case ColFormatType.Warn:
+                        col = ColFileParser.ParsePartial( readResult );
+                        break;
+
+                    case ColFormatType.Fail:
+                    default:
+                        Debug.WriteLine( "COL format invalid or unsupported." );
+                        return null;
+                }
+
+
+                // -------------------------------------------------
+                // 3. Optional: dump summary for debugging
+                // -------------------------------------------------
+                ColVerify.DumpSummary( readResult , col );
 
                 return new LoadedAsset<ColFile>( path , col );
             }
@@ -39,6 +70,8 @@ namespace SNESassetsWPF.Services
                 return null;
             }
         }
+
+
 
 
         //
@@ -90,9 +123,41 @@ namespace SNESassetsWPF.Services
                     return null;
                 }
 
-                var scr = ScrFileParser.Parse(readResult.RawFile);
+                // -------------------------------------------------
+                // 1. Classify BEFORE parsing
+                // -------------------------------------------------
+                ScrFileParser.ClassifyScrStructure( readResult.RawFile , readResult );
 
-                ScrVerify.DumpSummary( scr );
+                if ( readResult.Format == ScrFileReadResult.ScrFormatType.Unreadable )
+                {
+                    Debug.WriteLine( "SCR unreadable: " + readResult.ErrorMessage );
+                    return null;
+                }
+
+                // -------------------------------------------------
+                // 2. Parse based on classification
+                // -------------------------------------------------
+                ScrFile scr;
+
+                switch ( readResult.Format )
+                {
+                    case ScrFileReadResult.ScrFormatType.Strict:
+                        scr = ScrFileParser.ParseStrict( readResult.RawFile );
+                        break;
+
+                    case ScrFileReadResult.ScrFormatType.Partial:
+                        scr = ScrFileParser.ParsePartial( readResult.RawFile );
+                        break;
+
+                    default:
+                        Debug.WriteLine( "SCR format unknown or unsupported." );
+                        return null;
+                }
+
+                // -------------------------------------------------
+                // 3. Optional: dump summary for debugging
+                // -------------------------------------------------
+                ScrVerify.DumpSummary( readResult , scr );
 
                 return new LoadedAsset<ScrFile>( path , scr );
             }
@@ -102,6 +167,7 @@ namespace SNESassetsWPF.Services
                 return null;
             }
         }
+
 
 
 

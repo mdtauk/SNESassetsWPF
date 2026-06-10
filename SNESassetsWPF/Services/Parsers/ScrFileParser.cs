@@ -1,23 +1,137 @@
-﻿using System;
+﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
+using System;
 
 public static class ScrFileParser
 {
-    private const int TilesPerBlock  = 32 * 32;           // 1024 tiles
-    private const int BlockSizeBytes = TilesPerBlock * 2; // 2048 bytes
+    private const int TilesPerBlock  = 32 * 32;             // 1024 tiles
+    private const int BlockSizeBytes = TilesPerBlock * 2;   // 2048 bytes
     private const int TilemapSize    = 0x2000;            // 8192 bytes (4 blocks)
 
-    public static ScrFile Parse(byte[] data)
+    private const int TileEntrySize  = 2;                   // Size in bytes
+
+    private const int VisibilityMaskOffset = 0x2100;
+    private const int VisibilityMaskSize   = 0x200;       // 4 × 0x80 bytes
+    private const int FooterOffset         = 0x2000;
+    private const int FooterSize           = 0x100;       // 0x2000–0x20FF
+
+
+
+
+
+    public static void ClassifyScrStructure(byte[] data , ScrFileReadResult result)
+    {
+        int size = data.Length;
+
+        // ---------------------------------------------
+        // 1. Too small to be anything
+        // ---------------------------------------------
+        if ( size < 2 )
+        {
+            result.Format = ScrFileReadResult.ScrFormatType.Unreadable;
+            result.ErrorMessage = "SCR file is too small to contain any tile data.";
+            return;
+        }
+
+        // ---------------------------------------------
+        // 2. Strict size ranges (Normal, NoClear, F-Format)
+        // ---------------------------------------------
+        bool isStrictRange =
+        (size >= 0x2000 && size <= 0x2300) ||   // Normal
+        (size >= 0x2000 && size <= 0x2100) ||   // NoClearData
+        (size >= 0x2000 && size <= 0x4100);     // F-Format
+
+        if ( isStrictRange )
+        {
+            // Check tilemap completeness (0x0000–0x1FFF must exist)
+            if ( size < 0x2000 )
+            {
+                // Should never happen because of the range check,
+                // but we guard anyway.
+                result.Format = ScrFileReadResult.ScrFormatType.Partial;
+                result.WarningMessage = "SCR tilemap region is incomplete.";
+                return;
+            }
+
+            // Validate tile entries in the tilemap region
+            bool validTilemap = true;
+
+            for ( int i = 0 ; i < 0x2000 ; i += 2 )
+            {
+                int low = data[i];
+                int high = data[i + 1];
+                int tileIndex = ((high & 0x03) << 8) | low;
+
+                if ( tileIndex > 1023 )
+                {
+                    validTilemap = false;
+                    break;
+                }
+            }
+
+            if ( validTilemap )
+            {
+                result.Format = ScrFileReadResult.ScrFormatType.Strict;
+
+                // Missing footer?
+                if ( size < 0x2100 )
+                    result.WarningMessage = "SCR metadata footer is missing.";
+
+                // Missing visibility mask?
+                if ( size < 0x2300 )
+                    result.WarningMessage += " SCR visibility mask is missing; all tiles will be visible.";
+
+                return;
+            }
+
+            // If tilemap is invalid but size is strict-range → treat as partial
+            result.Format = ScrFileReadResult.ScrFormatType.Partial;
+            result.WarningMessage = "SCR tilemap contains invalid entries; treating as partial.";
+            return;
+        }
+
+        // ---------------------------------------------
+        // 3. Not strict-range → scan for ANY valid tile entry
+        // ---------------------------------------------
+        bool foundValidTile = false;
+
+        for ( int i = 0 ; i < size - 1 ; i += 2 )
+        {
+            int low = data[i];
+            int high = data[i + 1];
+            int tileIndex = ((high & 0x03) << 8) | low;
+
+            if ( tileIndex <= 1023 )
+            {
+                foundValidTile = true;
+                break;
+            }
+        }
+
+        if ( foundValidTile )
+        {
+            result.Format = ScrFileReadResult.ScrFormatType.Partial;
+            result.WarningMessage = "Partial SCR detected (non-standard size or structure).";
+            return;
+        }
+
+        // ---------------------------------------------
+        // 4. No valid tile entries → unreadable
+        // ---------------------------------------------
+        result.Format = ScrFileReadResult.ScrFormatType.Unreadable;
+        result.ErrorMessage = "SCR file contains no valid tile entries and cannot be parsed.";
+    }
+
+
+
+
+
+    public static ScrFile ParseStrict(byte[] data)
     {
         if ( data == null || data.Length < TilemapSize )
             throw new ArgumentException( "SCR data is too small." , nameof( data ) );
 
-        // This matches S‑CG‑CAD SCR layout:
-        // 0x0000–0x1FFF = 4 × 0x800 tilemap blocks
-        // 0x2000–0x20FF = footer/extra
-        // 0x2100–0x22FF = clear mask (visibility), 4 × 0x80 bytes
-        // total size 0x2300 for “Normal” format
-
+        // Tilemap is always 4 blocks for strict SCR
         int blockCount = TilemapSize / BlockSizeBytes; // 4
 
         var scr = new ScrFile
@@ -38,29 +152,29 @@ public static class ScrFileParser
 
         // ---------------------------------------------
         // Extract visibility mask from SCR footer
-        // (equivalent to CAD.SCR clear[][] logic)
         // ---------------------------------------------
-        bool[][] scrClearMask = new bool[4][];
+        bool[][] scrClearMask = new bool[blockCount][];
 
-        for ( int s = 0 ; s < 4 ; s++ )
+        // Each block has 0x80 bytes of mask data
+        const int MaskBytesPerBlock = VisibilityMaskSize / 4; // 0x80
+
+        for ( int s = 0 ; s < blockCount ; s++ )
         {
-            // 0x80 bytes per screen, interleaved in a weird pattern
-            byte[] tmp = new byte[0x80];
+            byte[] tmp = new byte[MaskBytesPerBlock];
 
-            for ( int j = 0 ; j < 0x80 ; j++ )
+            for ( int j = 0 ; j < MaskBytesPerBlock ; j++ )
             {
                 int srcOffset =
-                    0x2100
-                    + ((s & 2) * 0x80)
-                    + ((s & 1) * 4)
-                    + (j % 4)
-                    + ((j / 4) * 8);
+                VisibilityMaskOffset
+                + ((s & 2) * MaskBytesPerBlock)
+                + ((s & 1) * 4)
+                + (j % 4)
+                + ((j / 4) * 8);
 
                 tmp[j] = data[srcOffset];
             }
 
-            // Convert 0x80 bytes → 1024 bits (32×32 tiles), reversed bit order
-            scrClearMask[s] = ToBitStreamReverse( tmp , 1024 );
+            scrClearMask[s] = ToBitStreamReverse( tmp , TilesPerBlock );
         }
 
         // ---------------------------------------------
@@ -68,17 +182,17 @@ public static class ScrFileParser
         // ---------------------------------------------
         for ( int b = 0 ; b < blockCount ; b++ )
         {
-            int      blockOffset = b * BlockSizeBytes;
-            ScrBlock block       = scr.Blocks[b];
+            int blockOffset = b * BlockSizeBytes;
+            ScrBlock block  = scr.Blocks[b];
 
             for ( int i = 0 ; i < TilesPerBlock ; i++ )
             {
-                int entryOffset = blockOffset + (i * 2);
+                int entryOffset = blockOffset + (i * TileEntrySize);
 
                 ushort raw = (ushort)(
-                    data[entryOffset] |
-                    (data[entryOffset + 1] << 8)
-                );
+                data[entryOffset] |
+                (data[entryOffset + 1] << 8)
+            );
 
                 bool isVisible = scrClearMask[b][i];
 
@@ -94,6 +208,10 @@ public static class ScrFileParser
 
         return scr;
     }
+
+
+
+
 
     /// <summary>
     /// Convert bytes to a bitstream, using the same “reverse” bit order
@@ -113,4 +231,102 @@ public static class ScrFileParser
 
         return bits;
     }
+
+
+
+
+    public static ScrFile ParsePartial(byte[] data)
+    {
+        int size = data.Length;
+
+        // ---------------------------------------------
+        // 1. Determine how many complete tile entries exist
+        // ---------------------------------------------
+        int tileEntryCount = size / TileEntrySize; // floor division
+        int maxPossibleTiles = tileEntryCount;
+
+        // Clamp to maximum possible tiles (4 blocks)
+        if ( maxPossibleTiles > TilesPerBlock * 4 )
+            maxPossibleTiles = TilesPerBlock * 4;
+
+        // ---------------------------------------------
+        // 2. Determine block count (1, 2, or 4)
+        // ---------------------------------------------
+        int blockCount;
+
+        if ( maxPossibleTiles <= TilesPerBlock )
+            blockCount = 1; // 32×32
+        else if ( maxPossibleTiles <= TilesPerBlock * 2 )
+            blockCount = 2; // 32×64 or 64×32
+        else
+            blockCount = 4; // 64×64
+
+        // ---------------------------------------------
+        // 3. Allocate ScrFile with padded blocks
+        // ---------------------------------------------
+        var scr = new ScrFile
+        {
+            BlockCount = blockCount,
+            Blocks     = new ScrBlock[blockCount],
+            RawFile    = data
+        };
+
+        for ( int b = 0 ; b < blockCount ; b++ )
+        {
+            scr.Blocks[b] = new ScrBlock
+            {
+                Entries = new ScrEntry[TilesPerBlock] ,
+                VisibilityMask = new bool[TilesPerBlock]
+            };
+
+            // Default: all tiles visible
+            for ( int i = 0 ; i < TilesPerBlock ; i++ )
+                scr.Blocks[b].VisibilityMask[i] = true;
+        }
+
+        // ---------------------------------------------
+        // 4. Copy whatever tile entries exist into blocks
+        // ---------------------------------------------
+        int tilesToCopy = maxPossibleTiles;
+        int tileIndex = 0;
+
+        for ( int b = 0 ; b < blockCount ; b++ )
+        {
+            ScrBlock block = scr.Blocks[b];
+
+            for ( int i = 0 ; i < TilesPerBlock ; i++ )
+            {
+                if ( tileIndex < tilesToCopy )
+                {
+                    int offset = tileIndex * TileEntrySize;
+
+                    ushort raw = (ushort)(
+                    data[offset] |
+                    (data[offset + 1] << 8)
+                );
+
+                    block.Entries[i] = new ScrEntry
+                    {
+                        RawValue = raw ,
+                        IsVisible = true
+                    };
+
+                    tileIndex++;
+                }
+                else
+                {
+                    // Pad missing tiles with 0x0000
+                    block.Entries[i] = new ScrEntry
+                    {
+                        RawValue = 0 ,
+                        IsVisible = true
+                    };
+                }
+            }
+        }
+
+        return scr;
+    }
+
+
 }

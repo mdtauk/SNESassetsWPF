@@ -1,5 +1,6 @@
-﻿using System.Diagnostics;
+﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
+using System.Diagnostics;
 
 namespace SNESassetsWPF.Services
 {
@@ -9,10 +10,25 @@ namespace SNESassetsWPF.Services
     /// </summary>
     public static class ScrVerify
     {
-        public static void DumpSummary(ScrFile scr)
+        public static void DumpSummary(ScrFileReadResult readResult , ScrFile scr)
         {
             Debug.WriteLine( "SCR SUMMARY" );
             Debug.WriteLine( "-----------" );
+
+            if ( readResult == null )
+            {
+                Debug.WriteLine( "SCR read result is null." );
+                return;
+            }
+
+            Debug.WriteLine( $"Classification: {readResult.Format}" );
+
+            if ( readResult.Warnings.Count > 0 )
+            {
+                Debug.WriteLine( "Warnings:" );
+                foreach ( var w in readResult.Warnings )
+                    Debug.WriteLine( $"  • {w}" );
+            }
 
             if ( scr == null )
             {

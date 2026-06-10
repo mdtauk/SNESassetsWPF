@@ -447,6 +447,7 @@
                                                 Height="16"
                                                 Background="{Binding RgbColorBrush}"
                                                 IsHitTestVisible="True"
+                                                IsPlaceholder="{Binding IsPlaceholder}"
                                                 RGBColorHex="{Binding RGBColorString}"
                                                 SnesColorValue="{Binding SnesColorString}" />
 

@@ -2,6 +2,7 @@
 using SNESassetsWPF.Models;
 using SNESassetsWPF.ViewModels;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows.Media;
 
 namespace SNESassetsWPF.Services
@@ -32,17 +33,23 @@ namespace SNESassetsWPF.Services
                     var snes = col.RawColors[p, c];
                     var rgb  = col.RgbColors[p, c];
 
+                    bool isPlaceholder = (rgb.A == 0);
+
+
                     row.Colors.Add( new PaletteEntry
                     {
                         SnesColor = snes ,
                         SnesColorString = snes.ToHexPair() ,
                         RgbColor = rgb ,
-                        RGBColorString = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}"
+                        RGBColorString = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}" ,
+                        IsPlaceholder = isPlaceholder
                     } );
                 }
 
                 rows.Add( row );
             }
+            int placeholderCount = rows.SelectMany(r => r.Colors).Count(e => e.IsPlaceholder);
+            Debug.WriteLine( $"[PaletteBuilder] Total placeholders: {placeholderCount}" );
 
             return rows;
         }
@@ -52,7 +59,7 @@ namespace SNESassetsWPF.Services
         /// Builds a single PaletteEntry from raw SNES BGR555 bytes.
         /// This helper is useful for palette editing or conversion tools.
         /// </summary>
-        public PaletteEntry BuildEntry(byte low , byte high)
+        public PaletteEntry BuildEntry(byte low , byte high , bool isPlaceholder)
         {
             // Combine bytes into a 15‑bit SNES colour value.
             int value = low | (high << 8);
@@ -62,7 +69,7 @@ namespace SNESassetsWPF.Services
             int g = ((value >> 5) & 0x1F) << 3;
             int b = ((value >> 10) & 0x1F) << 3;
 
-            var rgb = Color.FromRgb((byte)r, (byte)g, (byte)b);
+            var rgb = Color.FromArgb( 255 , (byte)r, (byte)g, (byte)b );
             var snes = new SnesColor(low, high);
 
             return new PaletteEntry
@@ -70,7 +77,8 @@ namespace SNESassetsWPF.Services
                 SnesColor = snes ,
                 SnesColorString = snes.ToHexPair() ,
                 RgbColor = rgb ,
-                RGBColorString = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}"
+                RGBColorString = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}" ,
+                IsPlaceholder = isPlaceholder
             };
         }
     }

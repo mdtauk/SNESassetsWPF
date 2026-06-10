@@ -37,7 +37,7 @@ namespace SNESassetsWPF.Models
             int g = ((value >> 5) & 0x1F) << 3;
             int b = ((value >> 10) & 0x1F) << 3;
 
-            RgbColor = Color.FromRgb( (byte)r , (byte)g , (byte)b );
+            RgbColor = Color.FromArgb( 255 , (byte)r , (byte)g , (byte)b );
 
             SnesColorString = SnesColor.ToHexPair();
             RGBColorString = $"#{RgbColor.R:X2}{RgbColor.G:X2}{RgbColor.B:X2}";
