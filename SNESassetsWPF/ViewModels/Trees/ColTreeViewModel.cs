@@ -22,7 +22,6 @@ namespace SNESassetsWPF.ViewModels
 
         public string CurrentFolder { get; private set; }
 
-
         public ColTreeViewModel()
         {
             _builtIn = new BuiltInAssetService();
@@ -38,7 +37,6 @@ namespace SNESassetsWPF.ViewModels
             RootItems.Add( BuiltInFileNode );
         }
 
-
         public void SelectBuiltIn()
         {
             SelectedFileNode = BuiltInFileNode;
@@ -51,21 +49,20 @@ namespace SNESassetsWPF.ViewModels
 
             RootItems.Clear();
 
-            // re-add built-in at top
+            // 1. Add built-in COL at top
             if ( builtIn != null )
                 RootItems.Add( builtIn );
 
+            // 2. Scan folder
             var scanned = _scanner.Scan(folder);
 
+            // 3. Filter by COL types
             var filtered = FilterTree(scanned, FileType.Col, FileType.ColBackup);
 
-            foreach ( var sub in filtered.SubFolders )
-                RootItems.Add( sub );
+            // 4. Only add the root folder if it contains matching files
+            if ( filtered.Files.Any() || filtered.SubFolders.Any() )
+                RootItems.Add( filtered );
         }
-
-
-
-
 
         private FolderNode FilterTree(FolderNode node , params FileType[] allowed)
         {
@@ -87,15 +84,15 @@ namespace SNESassetsWPF.ViewModels
             {
                 var child = FilterTree(sub, allowed);
 
+                // Only include folders that contain valid files or subfolders
                 if ( child.Files.Any() || child.SubFolders.Any() )
                     filtered.SubFolders.Add( child );
             }
 
             return filtered;
         }
-
-
     }
+
 
 
 }

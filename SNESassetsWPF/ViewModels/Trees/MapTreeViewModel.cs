@@ -19,7 +19,7 @@ namespace SNESassetsWPF.ViewModels
         public ObservableCollection<object> RootItems { get; } = new();
 
         /// <summary>
-        /// The currently selected PNL file node.
+        /// The currently selected MAP file node.
         /// </summary>
         public FileNode SelectedFileNode { get; private set; }
 
@@ -46,11 +46,12 @@ namespace SNESassetsWPF.ViewModels
 
             var scanned = _scanner.Scan(folder);
 
-            // Filter to PNL + PNL.BAK files
+            // Filter to MAP + MAP.BAK files
             var filtered = FilterTree(scanned, FileType.Map, FileType.MapBackup);
 
-            foreach ( var sub in filtered.SubFolders )
-                RootItems.Add( sub );
+            // Only add the root folder if it contains matching files
+            if ( filtered.Files.Any() || filtered.SubFolders.Any() )
+                RootItems.Add( filtered );
         }
 
         /// <summary>

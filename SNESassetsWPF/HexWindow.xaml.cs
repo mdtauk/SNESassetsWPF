@@ -21,21 +21,44 @@ namespace SNESassetsWPF
     /// </summary>
     public partial class HexWindow : Window
     {
-        public HexWindow(string hexText , string headerText)
+        public HexWindow(string hexText , byte[] metadata)
         {
             InitializeComponent();
-            txtHex.Text = hexText;   // assuming your TextBox is named txtHex
-            txtHeader.Text = headerText;
+            txtHex.Text = hexText;
+
+            string header = "(no header found)";
+
+            if ( metadata != null && metadata.Length > 0 )
+            {
+                // Find first null terminator (end of ASCII header)
+                int end = Array.IndexOf(metadata, (byte)0);
+                if ( end < 0 ) end = metadata.Length;
+
+                // Decode only up to the first null
+                header = Encoding.ASCII.GetString( metadata , 0 , end ).Trim();
+            }
+
+            txtHeader.Text = header;
         }
+
+
 
         private void btnCopyHex_Click(object sender , RoutedEventArgs e)
         {
-            string raw = txtHex.Text
+            // Split into lines
+            var lines = txtHex.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            // Skip the first line (the title)
+            var hexLines = lines.Skip(1);
+
+            // Join back together
+            string rawHex = string.Join("", hexLines)
                 .Replace(" ", "")
                 .Replace("\r", "")
                 .Replace("\n", "");
 
-            Clipboard.SetText( raw );
+            Clipboard.SetText( rawHex );
         }
+
     }
 }

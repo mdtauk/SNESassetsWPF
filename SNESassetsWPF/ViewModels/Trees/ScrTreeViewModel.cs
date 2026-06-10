@@ -49,8 +49,9 @@ namespace SNESassetsWPF.ViewModels
             // Filter to SCR + SCR.BAK files
             var filtered = FilterTree(scanned, FileType.Scr, FileType.ScrBackup);
 
-            foreach ( var sub in filtered.SubFolders )
-                RootItems.Add( sub );
+            // Only add the root folder if it contains matching files
+            if ( filtered.Files.Any() || filtered.SubFolders.Any() )
+                RootItems.Add( filtered );
         }
 
         /// <summary>

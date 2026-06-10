@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Windows;
 using System.Windows.Input;
 
 namespace SNESassetsWPF.ViewModels
@@ -209,6 +210,7 @@ namespace SNESassetsWPF.ViewModels
         // ─────────────────────────────────────────────────────────────
         //
         public ICommand ChooseFolderCommand { get; }
+        public ICommand ShowColHexCommand { get; }
 
         public ICommand LoadColCommand { get; }
         public ICommand LoadCgxCommand { get; }
@@ -230,6 +232,7 @@ namespace SNESassetsWPF.ViewModels
         public MainViewModel()
         {
             ChooseFolderCommand = new RelayCommand( ChooseFolder );
+            ShowColHexCommand = new RelayCommand( ShowColHex );
 
 
             // Create ALL viewer VMs FIRST
@@ -305,6 +308,55 @@ namespace SNESassetsWPF.ViewModels
                 MapTree.LoadFolder( dlg.FolderName );
             }
         }
+
+
+
+
+        private void ShowColHex()
+        {
+            var node = ColTree.SelectedFileNode;
+            if ( node == null )
+                return;
+
+            var col = CurrentCol;
+
+            // 1. Build raw 512-byte palette
+            byte[] raw = new byte[512];
+            int k = 0;
+
+            for ( int row = 0 ; row < 16 ; row++ )
+            {
+                for ( int colIndex = 0 ; colIndex < 16 ; colIndex++ )
+                {
+                    var snes = col.Asset.RawColors[row, colIndex];
+
+                    raw[k++] = snes.Low;
+                    raw[k++] = snes.High;
+                }
+            }
+
+
+            // 2. Format hex dump (16 bytes per line)
+            var sb = new StringBuilder();
+            sb.AppendLine( "=== RAW 512-BYTE PALETTE HEX ===" + System.Environment.NewLine );
+
+            for ( int i = 0 ; i < raw.Length ; i++ )
+            {
+                sb.Append( raw[i].ToString( "X2" ) );
+                sb.Append( ' ' );
+
+                if ( ( i + 1 ) % 16 == 0 )
+                    sb.AppendLine();
+            }
+
+
+            // 3. Show modal window
+            var win = new HexWindow(sb.ToString(), col.Asset.Metadata);
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+
 
 
     }

@@ -79,15 +79,17 @@ namespace SNESassetsWPF.Services
             {
                 var child = ScanFolder(sub, depth + 1);
 
-                if ( child.Files.Any() || child.SubFolders.Any() )
+                // Only drop folders that contain NOTHING
+                if ( child.Files.Count == 0 && child.SubFolders.Count == 0 )
                 {
-                    Debug.WriteLine( $"{indent}  ✓ Keep folder: {sub}" );
-                    node.SubFolders.Add( child );
+                    Debug.WriteLine( $"{indent}  Drop empty folder: {sub}" );
                 }
                 else
                 {
-                    Debug.WriteLine( $"{indent}  ✗ Drop empty folder: {sub}" );
+                    Debug.WriteLine( $"{indent}  Keep folder: {sub}" );
+                    node.SubFolders.Add( child );
                 }
+
             }
 
             Debug.WriteLine( $"{indent}← Exit folder: {folder}  (Files: {node.Files.Count}, Subfolders: {node.SubFolders.Count})" );

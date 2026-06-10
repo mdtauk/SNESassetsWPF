@@ -35,6 +35,9 @@ namespace SNESassetsWPF.ViewModels
             _scanner = new AssetScannerService();
         }
 
+
+
+
         /// <summary>
         /// Loads the folder and populates the TreeView with PNL and PNL backup files.
         /// </summary>
@@ -46,12 +49,16 @@ namespace SNESassetsWPF.ViewModels
 
             var scanned = _scanner.Scan(folder);
 
-            // Filter to PNL + PNL.BAK files
             var filtered = FilterTree(scanned, FileType.Pnl, FileType.PnlBackup);
 
-            foreach ( var sub in filtered.SubFolders )
-                RootItems.Add( sub );
+            // Only add the root folder if it contains matching files
+            if ( filtered.Files.Any() || filtered.SubFolders.Any() )
+                RootItems.Add( filtered );
         }
+
+
+
+
 
         /// <summary>
         /// Recursively filters a FolderNode tree to include only allowed file types.
@@ -83,6 +90,9 @@ namespace SNESassetsWPF.ViewModels
 
             return filtered;
         }
+
+
+
 
         /// <summary>
         /// Called by the TreeViewController when a file is selected.

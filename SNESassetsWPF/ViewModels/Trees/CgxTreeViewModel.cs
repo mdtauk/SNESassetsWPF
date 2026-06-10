@@ -1,13 +1,8 @@
 ﻿using SNESassetsWPF.Enums;
 using SNESassetsWPF.Models;
 using SNESassetsWPF.Services;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Text;
-
-
-
+using System.Linq;
 
 namespace SNESassetsWPF.ViewModels
 {
@@ -20,9 +15,7 @@ namespace SNESassetsWPF.ViewModels
         private readonly BuiltInAssetService _builtIn;
         private readonly AssetScannerService _scanner;
 
-
         public string CurrentFolder { get; private set; }
-
 
         public CgxTreeViewModel()
         {
@@ -37,17 +30,19 @@ namespace SNESassetsWPF.ViewModels
 
             RootItems.Clear();
 
-            // re-add built-in at top
+            // 1. Add built-in CGX at top
             if ( builtIn != null )
                 RootItems.Add( builtIn );
 
+            // 2. Scan folder
             var scanned = _scanner.Scan(folder);
 
-            // Filter to CGX files only
+            // 3. Filter to CGX + CGX.BAK
             var filtered = FilterTree(scanned, FileType.Cgx, FileType.CgxBackup);
 
-            foreach ( var sub in filtered.SubFolders )
-                RootItems.Add( sub );
+            // 4. Only add the root folder if it contains matching files
+            if ( filtered.Files.Any() || filtered.SubFolders.Any() )
+                RootItems.Add( filtered );
         }
 
         private FolderNode FilterTree(FolderNode node , params FileType[] allowed)
@@ -70,15 +65,13 @@ namespace SNESassetsWPF.ViewModels
             {
                 var child = FilterTree(sub, allowed);
 
+                // Only include folders that contain valid files or subfolders
                 if ( child.Files.Any() || child.SubFolders.Any() )
                     filtered.SubFolders.Add( child );
             }
 
             return filtered;
         }
-
-
-
 
         public void LoadBuiltIn()
         {
@@ -89,17 +82,9 @@ namespace SNESassetsWPF.ViewModels
             RootItems.Add( BuiltInFileNode );
         }
 
-
-
-
-
-
         public void SelectBuiltIn()
         {
-            // You will handle selection in the TreeViewController
-            // by restoring state with BuiltInFileNode.FullPath
+            SelectedFileNode = BuiltInFileNode;
         }
-
-
     }
 }

@@ -45,10 +45,18 @@ namespace SNESassetsWPF.Formats
                 col.RgbColors[row , colIndex] = rgb;
             }
 
-            // Your old parser used RawMetadata from the reader.
-            // Since your current reader does NOT provide metadata,
-            // we keep this empty (same behaviour as before).
-            col.Metadata = Array.Empty<byte>();
+            // Metadata = everything after the first 512 bytes
+            byte[] metadata = Array.Empty<byte>();
+            if ( raw.RawFile.Length > 512 )
+            {
+                int metaLength = raw.RawFile.Length - 512;
+                metadata = new byte[metaLength];
+                Buffer.BlockCopy( raw.RawFile , 512 , metadata , 0 , metaLength );
+            }
+            col.Metadata = metadata;
+
+
+
 
             // Build flat 256‑entry cache
             col.BuildCachedColors();
