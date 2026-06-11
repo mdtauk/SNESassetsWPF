@@ -1,4 +1,6 @@
-﻿namespace SNESassetsWPF.Models
+﻿using System.IO.Pipelines;
+
+namespace SNESassetsWPF.Models
 {
     /// <summary>
     /// Wraps a parsed SNES asset together with its source file path.
@@ -17,10 +19,26 @@
         /// </summary>
         public T Asset { get; }
 
+        /// <summary>
+        /// Carries the FileReadResult
+        /// </summary>
+        public object ReadResult { get; }
+
+
+
+        public LoadedAsset(string path , T asset , object readResult)
+        {
+            Path = path;
+            Asset = asset;
+            ReadResult = readResult;
+        }
+
+        // Constructor without ReadResult
         public LoadedAsset(string path , T asset)
         {
             Path = path;
             Asset = asset;
+            ReadResult = null;
         }
 
         /// <summary>

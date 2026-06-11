@@ -253,6 +253,5 @@ namespace SNESassetsWPF
                 e.Handled = true; // stops ListBox from selecting the row
             }
         }
-
     }
 }

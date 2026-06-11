@@ -1,6 +1,8 @@
 ﻿using SNESassetsWPF.Formats;
 using SNESassetsWPF.Models;
 using System;
+using static SNESassetsWPF.Formats.ColFileReadResult;
+using static SNESassetsWPF.Formats.ScrFileReadResult;
 
 public static class ScrFileParser
 {
@@ -29,7 +31,13 @@ public static class ScrFileParser
         if ( size < 2 )
         {
             result.Format = ScrFileReadResult.ScrFormatType.Unreadable;
-            result.ErrorMessage = "SCR file is too small to contain any tile data.";
+
+            result.Warnings.Add( new ScrWarning
+            {
+                Long = "File is too small to contain any Cgx tile reference data." ,
+                Short = "Too small to contain tiles."
+            } );
+
             return;
         }
 
@@ -49,7 +57,13 @@ public static class ScrFileParser
                 // Should never happen because of the range check,
                 // but we guard anyway.
                 result.Format = ScrFileReadResult.ScrFormatType.Partial;
-                result.WarningMessage = "SCR tilemap region is incomplete.";
+
+                result.Warnings.Add( new ScrWarning
+                {
+                    Long = "Tilemap region is incomplete." ,
+                    Short = "Tilemap incomplete."
+                } );
+
                 return;
             }
 
@@ -75,18 +89,32 @@ public static class ScrFileParser
 
                 // Missing footer?
                 if ( size < 0x2100 )
-                    result.WarningMessage = "SCR metadata footer is missing.";
+                    result.Warnings.Add( new ScrWarning
+                    {
+                        Long = "File metadata footer is missing." ,
+                        Short = "Metadata missing."
+                    } );
 
                 // Missing visibility mask?
                 if ( size < 0x2300 )
-                    result.WarningMessage += " SCR visibility mask is missing; all tiles will be visible.";
+                    result.Warnings.Add( new ScrWarning
+                    {
+                        Long = "Visibility mask is missing; all tiles will be visible." ,
+                        Short = "File doesn't set tile visibility."
+                    } );
 
                 return;
             }
 
             // If tilemap is invalid but size is strict-range → treat as partial
             result.Format = ScrFileReadResult.ScrFormatType.Partial;
-            result.WarningMessage = "SCR tilemap contains invalid entries; treating as partial.";
+
+            result.Warnings.Add( new ScrWarning
+            {
+                Long = "Tilemap contains invalid entries; treating as partial." ,
+                Short = "File is incomplete."
+            } );
+
             return;
         }
 
@@ -111,7 +139,13 @@ public static class ScrFileParser
         if ( foundValidTile )
         {
             result.Format = ScrFileReadResult.ScrFormatType.Partial;
-            result.WarningMessage = "Partial SCR detected (non-standard size or structure).";
+
+            result.Warnings.Add( new ScrWarning
+            {
+                Long = "Partial SCR detected (non-standard size or structure)." ,
+                Short = "File is incomplete."
+            } );
+
             return;
         }
 
@@ -119,7 +153,12 @@ public static class ScrFileParser
         // 4. No valid tile entries → unreadable
         // ---------------------------------------------
         result.Format = ScrFileReadResult.ScrFormatType.Unreadable;
-        result.ErrorMessage = "SCR file contains no valid tile entries and cannot be parsed.";
+
+        result.Warnings.Add( new ScrWarning
+        {
+            Long = "File contains no valid tile entries and cannot be parsed." ,
+            Short = "File cannot be opened."
+        } );
     }
 
 
@@ -128,8 +167,11 @@ public static class ScrFileParser
 
     public static ScrFile ParseStrict(byte[] data)
     {
+        // Error message if malformed file ends up parsed as strict
         if ( data == null || data.Length < TilemapSize )
-            throw new ArgumentException( "SCR data is too small." , nameof( data ) );
+        {
+            return null;
+        }
 
         // Tilemap is always 4 blocks for strict SCR
         int blockCount = TilemapSize / BlockSizeBytes; // 4

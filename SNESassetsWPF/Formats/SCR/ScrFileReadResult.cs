@@ -1,4 +1,6 @@
-﻿namespace SNESassetsWPF.Formats
+﻿using static SNESassetsWPF.Formats.ColFileReadResult;
+
+namespace SNESassetsWPF.Formats
 {
     /// <summary>
     /// Result wrapper for SCR file loading.
@@ -14,15 +16,21 @@
 
 
 
+
+        public class ScrWarning
+        {
+            public string Long { get; set; }
+            public string Short { get; set; }
+        }
+
+
+
+
         public bool Success { get; set; }
-        public ScrFormatType Format { get; set; }
-
         public string ErrorMessage { get; set; } = string.Empty;
-        public string WarningMessage { get; set; } = string.Empty;
-        public List<string> Warnings { get; set; } = new();
-
-
         public byte[] RawFile { get; set; } = Array.Empty<byte>();
+        public ScrFormatType Format { get; set; }
+        public List<ScrWarning> Warnings { get; set; } = new();
 
 
 

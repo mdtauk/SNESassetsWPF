@@ -15,23 +15,29 @@
 
 
 
+        public class ColWarning
+        {
+            public string Long { get; set; }
+            public string Short { get; set; }
+        }
+
+
+
+
         public bool Success { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;
-
-        // Raw file data
         public byte[] RawFile { get; set; } = Array.Empty<byte>();
+        public ColFormatType Format { get; set; } = ColFormatType.Valid;
+        public List<ColWarning> Warnings { get; set; } = new();
+
+
+
 
         // Palette region (0x000–0x1FF) — may be partial
         public byte[] RawColorData { get; set; } = Array.Empty<byte>();
 
         // Footer/metadata region (0x200+) — may be partial
         public byte[] RawMetadata { get; set; } = Array.Empty<byte>();
-
-        public ColFormatType Format { get; set; } = ColFormatType.Valid;
-
-
-        // NEW: list of warnings for malformed conditions
-        public List<string> Warnings { get; set; } = new();
 
         public static ColFileReadResult Fail(string msg)
             => new ColFileReadResult { Success = false , ErrorMessage = msg };

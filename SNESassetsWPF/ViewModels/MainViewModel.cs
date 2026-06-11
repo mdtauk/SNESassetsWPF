@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Input;
+using static SNESassetsWPF.Formats.ColFileReadResult;
 
 namespace SNESassetsWPF.ViewModels
 {
@@ -25,6 +26,21 @@ namespace SNESassetsWPF.ViewModels
         private readonly PaletteBuilder _paletteBuilder = new();
         private readonly PaletteRendererAdapter _paletteAdapter;
 
+
+
+
+        // ─────────────────────────────────────────────────────────────
+        //  WARNINGS
+        // ─────────────────────────────────────────────────────────────
+        public ObservableCollection<UiMessage> AllWarnings { get; }
+            = new ObservableCollection<UiMessage>();
+
+        // Internal buckets for each asset type
+        private readonly List<UiMessage> _colWarnings = new();
+        private readonly List<UiMessage> _cgxWarnings = new();
+        private readonly List<UiMessage> _scrWarnings = new();
+        private readonly List<UiMessage> _pnlWarnings = new();
+        private readonly List<UiMessage> _mapWarnings = new();
 
 
 
@@ -95,6 +111,44 @@ namespace SNESassetsWPF.ViewModels
                     return;
                 }
 
+
+                // Update COL warnings
+                _colWarnings.Clear();
+
+                if ( value.ReadResult is ColFileReadResult rr && rr.Warnings != null )
+                {
+
+                    string severity =
+                        rr.Format == ColFormatType.Fail  ? "Error" :
+                        rr.Format == ColFormatType.Warn  ? "Warning" :
+                        null;
+
+                    if ( severity != null )
+                    {
+                        _colWarnings.Add( new UiMessage
+                        {
+                            Severity = "Info" ,
+                            Text = "COL"
+                        } );
+
+                        // Grouped by Short to avoid duplicates
+                        foreach ( var group in rr.Warnings.GroupBy( w => w.Short ) )
+                        {
+                            _colWarnings.Add( new UiMessage
+                            {
+                                Severity = severity ,
+                                Text = group.Key
+                            } );
+                        }
+                    }
+                }
+
+                RebuildAllWarnings();
+
+
+
+
+
                 // Safe to use the palette now
                 Debug.WriteLine( $"[Main] CurrentCol set: RawColors={value.Asset.RawColors.Length}" );
 
@@ -154,10 +208,54 @@ namespace SNESassetsWPF.ViewModels
             {
                 _currentScr = value;
                 OnPropertyChanged();
-                System.Diagnostics.Debug.WriteLine( $"[Main] CurrentScr set: BlockCount={value?.Asset?.BlockCount}" );
+
+                // If load failed or file is null → clear SCR warnings
+                if ( value?.Asset == null )
+                {
+                    _scrWarnings.Clear();
+                    RebuildAllWarnings();
+                    ScrViewer.ScrFile = null;
+                    return;
+                }
+
+                // Update SCR warnings
+                _scrWarnings.Clear();
+
+                if ( value.ReadResult is ScrFileReadResult rr && rr.Warnings != null )
+                {
+                    string severity =
+                        rr.Format == ScrFileReadResult.ScrFormatType.Unreadable ? "Error" :
+                        rr.Format == ScrFileReadResult.ScrFormatType.Partial    ? "Warning" :
+                        null;
+
+                    if ( severity != null )
+                    {
+                        // Header
+                        _scrWarnings.Add( new UiMessage
+                        {
+                            Severity = "Info" ,
+                            Text = "SCR"
+                        } );
+
+                        // Grouped by Short to avoid duplicates
+                        foreach ( var group in rr.Warnings.GroupBy( w => w.Short ) )
+                        {
+                            _scrWarnings.Add( new UiMessage
+                            {
+                                Severity = severity ,
+                                Text = group.Key
+                            } );
+                        }
+                    }
+                }
+
+                RebuildAllWarnings();
+
+                // Update viewer
                 ScrViewer.ScrFile = value.Asset;
             }
         }
+
 
 
 
@@ -284,6 +382,20 @@ namespace SNESassetsWPF.ViewModels
             _paletteAdapter = new PaletteRendererAdapter( Palette , CgxViewer , ScrViewer , MapPnlViewer );
 
         }
+
+
+
+        private void RebuildAllWarnings()
+        {
+            AllWarnings.Clear();
+
+            foreach ( var w in _colWarnings ) AllWarnings.Add( w );
+            foreach ( var w in _cgxWarnings ) AllWarnings.Add( w );
+            foreach ( var w in _scrWarnings ) AllWarnings.Add( w );
+            foreach ( var w in _pnlWarnings ) AllWarnings.Add( w );
+            foreach ( var w in _mapWarnings ) AllWarnings.Add( w );
+        }
+
 
 
 

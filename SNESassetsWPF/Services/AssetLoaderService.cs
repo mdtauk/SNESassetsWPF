@@ -62,7 +62,7 @@ namespace SNESassetsWPF.Services
                 // -------------------------------------------------
                 ColVerify.DumpSummary( readResult , col );
 
-                return new LoadedAsset<ColFile>( path , col );
+                return new LoadedAsset<ColFile>( path , col , readResult );
             }
             catch ( Exception ex )
             {
@@ -159,7 +159,7 @@ namespace SNESassetsWPF.Services
                 // -------------------------------------------------
                 ScrVerify.DumpSummary( readResult , scr );
 
-                return new LoadedAsset<ScrFile>( path , scr );
+                return new LoadedAsset<ScrFile>( path , scr , readResult );
             }
             catch ( Exception ex )
             {

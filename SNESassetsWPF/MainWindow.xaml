@@ -197,7 +197,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="196" />
             <!--  Tabbed File Tree Column  -->
-            <ColumnDefinition Width="auto" />
+            <ColumnDefinition Width="272" />
             <!--  Palette Column  -->
             <ColumnDefinition Width="*" />
             <ColumnDefinition
@@ -394,112 +394,151 @@
 
 
 
-        <!--  COL region  -->
-        <ScrollViewer
+        <Grid
+            x:Name="gridColAudit"
             Grid.Row="1"
             Grid.Column="1"
-            Margin="0,0,12,0"
-            Padding="0">
-            <StackPanel
+            Margin="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto" />
+                <RowDefinition Height="4" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="auto" />
+            </Grid.RowDefinitions>
+
+
+            <!--  COL region  -->
+            <ScrollViewer
+                Grid.Row="0"
+                Margin="0,0,12,0"
+                Padding="0">
+                <StackPanel
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Orientation="Vertical">
+                    <TextBlock
+                        Margin="20,8,0,8"
+                        Style="{DynamicResource BodyTextBlockStyle}"
+                        Text="Palettes" />
+                    <Border
+                        Margin="0,0,0,16"
+                        Padding="0,4,4,4"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource LayerFillColorDefaultBrush}"
+                        CornerRadius="8">
+                        <ListBox
+                            x:Name="paletteListBox"
+                            MinWidth="272"
+                            MinHeight="256"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            Background="Transparent"
+                            FocusVisualStyle="{x:Null}"
+                            ItemContainerStyle="{DynamicResource listPaletteRowStyle}"
+                            ItemsSource="{Binding Palette.PaletteRows}"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                            SelectedIndex="{Binding CgxViewer.Palette.SelectedPaletteRowIndex, Mode=TwoWay}">
+
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:PaletteRowViewModel}">
+                                    <!--  One row of 16 colours  -->
+                                    <ItemsControl ItemsSource="{Binding Colors}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+
+                                                <!--  One swatch  -->
+                                                <uc:Swatch
+                                                    Width="16"
+                                                    Height="16"
+                                                    Background="{Binding RgbColorBrush}"
+                                                    IsHitTestVisible="True"
+                                                    IsPlaceholder="{Binding IsPlaceholder}"
+                                                    RGBColorHex="{Binding RGBColorString}"
+                                                    SnesColorValue="{Binding SnesColorString}" />
+
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+
+                        </ListBox>
+
+                    </Border>
+
+                    <Button
+                        x:Name="btnDisplayHex"
+                        Margin="4,0,0,16"
+                        Command="{Binding ShowColHexCommand}"
+                        Content="Display COL raw hex"
+                        IsEnabled="{Binding HasCol}" />
+
+                    <CheckBox
+                        x:Name="rowSelectCheck"
+                        Margin="4,0,0,8"
+                        Content="Force single palette row"
+                        IsChecked="{Binding CgxViewer.Palette.ForceSingleRow}"
+                        IsEnabled="{Binding CgxViewer.Palette.ForceSingleRowEnabled}" />
+
+                    <TextBlock
+                        x:Name="txtValidity"
+                        Margin="4,4,0,8"
+                        HorizontalAlignment="Left"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource SystemFillColorSuccessBrush}"
+                        Text="All colours within valid SNES range"
+                        TextAlignment="Left"
+                        Visibility="Collapsed" />
+
+                    <TextBlock
+                        x:Name="txtMalformed"
+                        MaxWidth="256"
+                        Margin="4,4,0,8"
+                        HorizontalAlignment="Left"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                        Text="This COL file is malformed"
+                        TextAlignment="Left"
+                        TextWrapping="WrapWithOverflow"
+                        Visibility="Collapsed" />
+
+
+                </StackPanel>
+            </ScrollViewer>
+
+
+            <Border
+                Grid.Row="1"
+                Height="1"
+                Margin="1,0,2,0"
                 HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                Orientation="Vertical">
-                <TextBlock
-                    Margin="20,8,0,8"
-                    Style="{DynamicResource BodyTextBlockStyle}"
-                    Text="Palettes" />
-                <Border
-                    Margin="0,0,0,16"
-                    Padding="0,4,4,4"
-                    HorizontalAlignment="Left"
-                    Background="{DynamicResource LayerFillColorDefaultBrush}"
-                    CornerRadius="8">
-                    <ListBox
-                        x:Name="paletteListBox"
-                        MinWidth="272"
-                        MinHeight="256"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        Background="Transparent"
-                        FocusVisualStyle="{x:Null}"
-                        ItemContainerStyle="{DynamicResource listPaletteRowStyle}"
-                        ItemsSource="{Binding Palette.PaletteRows}"
-                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                        SelectedIndex="{Binding CgxViewer.Palette.SelectedPaletteRowIndex, Mode=TwoWay}">
+                VerticalAlignment="Bottom"
+                Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
 
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:PaletteRowViewModel}">
-                                <!--  One row of 16 colours  -->
-                                <ItemsControl ItemsSource="{Binding Colors}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
+            <!--  Warning messages user control  -->
+            <uc:WarningSummary
+                Grid.Row="2"
+                Margin="0"
+                Padding="0"
+                HorizontalAlignment="Stretch"
+                DataContext="{Binding}" />
 
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
+            <Button
+                Grid.Row="3"
+                Margin="0,8,0,8"
+                Content="File audit" />
 
-                                            <!--  One swatch  -->
-                                            <uc:Swatch
-                                                Width="16"
-                                                Height="16"
-                                                Background="{Binding RgbColorBrush}"
-                                                IsHitTestVisible="True"
-                                                IsPlaceholder="{Binding IsPlaceholder}"
-                                                RGBColorHex="{Binding RGBColorString}"
-                                                SnesColorValue="{Binding SnesColorString}" />
-
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-
-                    </ListBox>
-
-                </Border>
-
-                <Button
-                    x:Name="btnDisplayHex"
-                    Margin="4,0,0,16"
-                    Command="{Binding ShowColHexCommand}"
-                    Content="Display COL raw hex"
-                    IsEnabled="{Binding HasCol}" />
-
-                <CheckBox
-                    x:Name="rowSelectCheck"
-                    Margin="4,0,0,8"
-                    Content="Force single palette row"
-                    IsChecked="{Binding CgxViewer.Palette.ForceSingleRow}"
-                    IsEnabled="{Binding CgxViewer.Palette.ForceSingleRowEnabled}" />
-
-                <TextBlock
-                    x:Name="txtValidity"
-                    Margin="4,4,0,8"
-                    HorizontalAlignment="Left"
-                    FontWeight="SemiBold"
-                    Foreground="{DynamicResource SystemFillColorSuccessBrush}"
-                    Text="All colours within valid SNES range"
-                    TextAlignment="Left"
-                    Visibility="Collapsed" />
-
-                <TextBlock
-                    x:Name="txtMalformed"
-                    MaxWidth="256"
-                    Margin="4,4,0,8"
-                    HorizontalAlignment="Left"
-                    FontWeight="SemiBold"
-                    Foreground="{DynamicResource SystemFillColorCriticalBrush}"
-                    Text="This COL file is malformed"
-                    TextAlignment="Left"
-                    TextWrapping="WrapWithOverflow"
-                    Visibility="Collapsed" />
+        </Grid>
 
 
-            </StackPanel>
-        </ScrollViewer>
+
 
         <!--  For resizing the tabebd column  -->
         <GridSplitter
