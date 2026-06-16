@@ -12,6 +12,30 @@ namespace SNESassetsWPF.Services
     {
         //
         // ─────────────────────────────────────────────────────────────
+        //  COL EXPORT
+        // ─────────────────────────────────────────────────────────────
+        //
+        public void ExportCol(PaletteViewModel view, LoadedAsset<ColFile> col)
+        {
+            if ( col == null )
+                return;
+
+            string exportName = BuildColExportName(
+                colPath: col.Path
+            );
+
+            var dlg = new SaveFileDialog
+            {
+                Filter = "PNG Image|*.png",
+                FileName = exportName
+            };
+
+            if ( dlg.ShowDialog() == true )
+                view.ExportPng( dlg.FileName );
+        }
+
+        //
+        // ─────────────────────────────────────────────────────────────
         //  CGX EXPORT
         // ─────────────────────────────────────────────────────────────
         //
@@ -158,6 +182,16 @@ namespace SNESassetsWPF.Services
         }
 
 
+
+
+        private string BuildColExportName(string colPath)
+        {
+            string col = NormalizeBaseName(colPath) ?? "unknown_COL";
+
+            string name = $"COL_{col}";
+
+            return name;
+        }
 
 
         private string BuildCgxExportName(

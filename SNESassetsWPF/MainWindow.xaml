@@ -218,7 +218,14 @@
                     Header="Open asset folder..." />
             </MenuItem>
 
-            <MenuItem Header="CGX Tools">
+            <MenuItem Header="COL">
+                <MenuItem
+                    x:Name="menuExportCOLtoPNG"
+                    Command="{Binding ExportColPngCommand}"
+                    Header="Export COL to PNG" />
+            </MenuItem>
+
+            <MenuItem Header="CGX">
 
                 <MenuItem
                     x:Name="menuShowCgxGrid"
@@ -235,7 +242,7 @@
 
             </MenuItem>
 
-            <MenuItem Header="SCR Tools">
+            <MenuItem Header="SCR">
 
                 <MenuItem
                     x:Name="menuShowScrGrid"
@@ -252,7 +259,7 @@
 
             </MenuItem>
 
-            <MenuItem Header="MAP + PNL Tools">
+            <MenuItem Header="MAP + PNL">
 
                 <MenuItem
                     x:Name="menuShowMapPnlGrid"
@@ -274,6 +281,11 @@
                     Header="Export MAP to PNG" />
 
             </MenuItem>
+
+            <MenuItem
+                x:Name="menuSettings"
+                Command="{Binding ShowSettingsCommand}"
+                Header="Settings" />
 
         </Menu>
 

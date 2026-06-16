@@ -2,6 +2,8 @@
 using SNESassetsWPF.Models;
 using System;
 using System.Collections.ObjectModel;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Linq;
 
 namespace SNESassetsWPF.ViewModels
@@ -53,6 +55,28 @@ namespace SNESassetsWPF.ViewModels
                 }
             }
         }
+
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PNG EXPORT CELL SIZE
+        // ─────────────────────────────────────────────────────────────
+        //
+        public int PaletteCellSize
+        {
+            get => Properties.Settings.Default.PaletteCellSize;
+            set
+            {
+                Properties.Settings.Default.PaletteCellSize = value;
+                Properties.Settings.Default.Save();
+                OnPropertyChanged();
+            }
+        }
+
+
+
 
 
         //
@@ -179,6 +203,65 @@ namespace SNESassetsWPF.ViewModels
                     .ToList()
                     .AsReadOnly();
             }
+        }
+
+
+
+
+        //
+        // ─────────────────────────────────────────────────────────────
+        //  PALETTE EXPORT PNG
+        // ─────────────────────────────────────────────────────────────
+        //
+        public void ExportPng(string path)
+        {
+            int cell = PaletteCellSize;
+            int width = 16 * cell;
+            int height = 16 * cell;
+
+            using var bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+
+            for ( int row = 0 ; row < 16 ; row++ )
+            {
+                if ( row >= PaletteRows.Count )
+                    break;
+
+                var paletteRow = PaletteRows[row];
+
+                for ( int col = 0 ; col < 16 ; col++ )
+                {
+                    if ( col >= paletteRow.Colors.Count )
+                        break;
+
+                    PaletteEntry entry = paletteRow.Colors[col];
+
+                    // Transparent if placeholder
+                    System.Drawing.Color pixelColor;
+
+                    if ( entry.IsPlaceholder )
+                    {
+                        pixelColor = System.Drawing.Color.FromArgb( 0 , 0 , 0 , 0 );
+                    }
+                    else
+                    {
+                        var c = entry.RgbColor;
+                        pixelColor = System.Drawing.Color.FromArgb( 255 , c.R , c.G , c.B );
+                    }
+
+                    int px = col * cell;
+                    int py = row * cell;
+
+                    for ( int y = 0 ; y < cell ; y++ )
+                    {
+                        for ( int x = 0 ; x < cell ; x++ )
+                        {
+                            bmp.SetPixel( px + x , py + y , pixelColor );
+                        }
+                    }
+                }
+            }
+
+            bmp.Save( path , ImageFormat.Png );
         }
     }
 }

@@ -309,6 +309,7 @@ namespace SNESassetsWPF.ViewModels
         //
         public ICommand ChooseFolderCommand { get; }
         public ICommand ShowColHexCommand { get; }
+        public ICommand ShowSettingsCommand { get; }
 
         public ICommand LoadColCommand { get; }
         public ICommand LoadCgxCommand { get; }
@@ -316,6 +317,7 @@ namespace SNESassetsWPF.ViewModels
         public ICommand LoadPnlCommand { get; }
         public ICommand LoadMapCommand { get; }
 
+        public ICommand ExportColPngCommand { get; }
         public ICommand ExportCgxPngCommand { get; }
         public ICommand ExportScrPngCommand { get; }
         public ICommand ExportPnlPngCommand { get; }
@@ -331,6 +333,7 @@ namespace SNESassetsWPF.ViewModels
         {
             ChooseFolderCommand = new RelayCommand( ChooseFolder );
             ShowColHexCommand = new RelayCommand( ShowColHex );
+            ShowSettingsCommand = new RelayCommand( ShowSettingsWindow );
 
 
             // Create ALL viewer VMs FIRST
@@ -351,6 +354,10 @@ namespace SNESassetsWPF.ViewModels
             LoadPnlCommand = new RelayCommand<FileNode>( node => CurrentPnl = _loader.LoadPnl( node.FullPath ) );
             LoadMapCommand = new RelayCommand<FileNode>( node => CurrentMap = _loader.LoadMap( node.FullPath ) );
 
+
+            ExportColPngCommand = new RelayCommand(
+                () => _exporter.ExportCol( Palette , CurrentCol )
+            );
 
             ExportCgxPngCommand = new RelayCommand(
                 () => _exporter.ExportCgx( CgxViewer , CurrentCgx , CurrentCol )
@@ -420,6 +427,24 @@ namespace SNESassetsWPF.ViewModels
                 MapTree.LoadFolder( dlg.FolderName );
             }
         }
+
+
+
+
+        private void ShowSettingsWindow()
+        {
+            var node = ColTree.SelectedFileNode;
+            if ( node == null )
+                return;
+
+            var col = CurrentCol;
+
+            // Show modal window
+            var win = new SettingsWindow( Palette );
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
 
 
 
