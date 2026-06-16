@@ -2,6 +2,7 @@
 using SNESassetsWPF.Models;
 using System;
 using System.IO;
+using System.Text;
 using System.Windows.Media;
 using static SNESassetsWPF.Formats.ColFileReadResult;
 
@@ -22,7 +23,7 @@ namespace SNESassetsWPF.Formats
 
 
         // ============================================================
-        // CLASSIFY INCOMING COL FILE
+        // CLASSIFY INCOMING COL FILE (RetroReversing definition)
         // ============================================================
         public static void ClassifyColStructure(ColFileReadResult result)
         {
@@ -37,44 +38,25 @@ namespace SNESassetsWPF.Formats
             result.RawMetadata = Array.Empty<byte>();
             result.Warnings.Clear();
 
-
-            // ------------------------------------------------------------
-            // 1. Detect valid colours and clusters
-            // ------------------------------------------------------------
             int validCount = 0;
             int clusterCount = 0;
             bool inCluster = false;
-
             int lastValidByteIndex = -1;
 
-            for ( int i = 0 ; i + 1 < length ; i += BytesPerColour )
+            for ( int i = 0 ; i + 1 < length && validCount < MaxColours ; i += BytesPerColour )
             {
                 ushort value = (ushort)(data[i] | (data[i + 1] << 8));
-
-                bool isValid =
-                    ((value & 0x8000) == 0) &&             // bit 15 must be 0
-                    ((value & 0x1F) <= 31) &&                // R
-                    (((value >> 5) & 0x1F) <= 31) &&         // G
-                    (((value >> 10) & 0x1F) <= 31);          // B
+                bool isValid = (value & 0x8000) == 0;
 
                 if ( isValid )
                 {
                     validCount++;
                     lastValidByteIndex = i + 1;
-
                     if ( !inCluster )
                     {
                         inCluster = true;
                         clusterCount++;
                     }
-
-                    if ( validCount > MaxColours )
-                        result.Warnings.Add( new ColWarning
-                        {
-                            Long = "File contains more than 256 valid colours — extra colours ignored." ,
-                            Short = "Has more than 256 colours."
-                        } );
-
                 }
                 else
                 {
@@ -82,103 +64,35 @@ namespace SNESassetsWPF.Formats
                 }
             }
 
-            // ------------------------------------------------------------
-            // 2. FAIL classification
-            // ------------------------------------------------------------
-            if ( validCount == 0 )
-            {
-                result.Format = ColFormatType.Fail;
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "No valid colour values were found in this file." ,
-                    Short = "No valid colours."
-                } );
-                result.RawColorData = Array.Empty<byte>();
-                result.RawMetadata = data;
-                return;
-            }
+            // --- RetroReversing definition: 512 palette bytes + footer + metadata ---
+            bool hasFooter = length >= 0x220 &&
+                     Encoding.ASCII.GetString(data, 0x200, 0x20)
+                     .StartsWith("NAK1989", StringComparison.OrdinalIgnoreCase);
 
-            // ------------------------------------------------------------
-            // 3. VALID classification
-            // ------------------------------------------------------------
-            if ( validCount == MaxColours && clusterCount == 1 && length >= PaletteBytes )
+            if ( validCount == MaxColours && hasFooter )
             {
-                // Perfect or headerless full COL
                 result.Format = ColFormatType.Valid;
-
-                result.RawColorData = new byte[PaletteBytes];
-                Buffer.BlockCopy( data , 0 , result.RawColorData , 0 , PaletteBytes );
-
-                if ( length > PaletteBytes )
-                {
-                    result.RawMetadata = new byte[length - PaletteBytes];
-                    Buffer.BlockCopy( data , PaletteBytes , result.RawMetadata , 0 , length - PaletteBytes );
-                }
-                else
-                {
-                    result.RawMetadata = Array.Empty<byte>();
-                }
-
+                result.RawColorData = data.Take( PaletteBytes ).ToArray();
+                result.RawMetadata = data.Skip( PaletteBytes ).ToArray();
                 return;
             }
 
-            // ------------------------------------------------------------
-            // 4. WARN classification
-            // ------------------------------------------------------------
+            // --- Warn classification ---
             result.Format = ColFormatType.Warn;
 
             if ( validCount < MaxColours )
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "Less than 256 valid colours were detected." ,
-                    Short = "Has less than 256 colours."
-                } );
+                result.Warnings.Add( new ColWarning { Short = "Has less than 256 colours." , Long = "Less than 256 valid colours detected." } );
 
             if ( clusterCount > 1 )
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "Contiguous groups of valid colours detected." ,
-                    Short = "Colours appear grouped."
-                } );
+                result.Warnings.Add( new ColWarning { Short = "Colours appear grouped." , Long = "Contiguous groups of valid colours detected before footer." } );
 
-            if ( clusterCount > 16 )
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "More than 16 groups of colours detected." ,
-                    Short = "Colour order will not match."
-                } );
+            if ( !hasFooter )
+                result.Warnings.Add( new ColWarning { Short = "Junk data after colours." , Long = "Footer string missing or malformed after palette region." } );
 
-            if ( length % 2 != 0 )
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "Odd number of bytes — last byte ignored." ,
-                    Short = "Final bytes were not a colour."
-                } );
-
-            if ( length > PaletteBytes )
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "File contains extra data beyond expected palette region." ,
-                    Short = "Junk data after colours."
-                } );
-
-            // Extract colour region = up to last valid colour
-            int colourBytes = Math.Min(lastValidByteIndex + 1, length);
-            result.RawColorData = new byte[colourBytes];
-            Buffer.BlockCopy( data , 0 , result.RawColorData , 0 , colourBytes );
-
-            // Metadata = everything after last valid colour
-            if ( colourBytes < length )
-            {
-                int metaLength = length - colourBytes;
-                result.RawMetadata = new byte[metaLength];
-                Buffer.BlockCopy( data , colourBytes , result.RawMetadata , 0 , metaLength );
-            }
-            else
-            {
-                result.RawMetadata = Array.Empty<byte>();
-            }
+            result.RawColorData = data.Take( Math.Min( lastValidByteIndex + 1 , length ) ).ToArray();
+            result.RawMetadata = data.Skip( result.RawColorData.Length ).ToArray();
         }
+
 
 
 
@@ -243,127 +157,52 @@ namespace SNESassetsWPF.Formats
         public static ColFile ParsePartial(ColFileReadResult result)
         {
             var col = new ColFile();
-
             byte[] data = result.RawFile;
             int length = data.Length;
 
-            int colourCount = 0;
-            int row = 0;
-            int colIndex = 0;
-
-            // Fill everything with placeholders first
-            for ( int r = 0 ; r < TotalRows ; r++ )
-                for ( int c = 0 ; c < ColoursPerRow ; c++ )
-                    col.RgbColors[r , c] = Color.FromArgb(0 , 128 , 128 , 128);
-
+            int colourCount = 0, row = 0, colIndex = 0;
             bool inCluster = false;
 
-            // Walk through file 2 bytes at a time
             for ( int i = 0 ; i + 1 < length ; i += BytesPerColour )
             {
-                if ( colourCount >= MaxColours )
-                {
-                    result.Warnings.Add( new ColWarning
-                    {
-                        Long = "File contains more than 256 valid colours — extra colours ignored." ,
-                        Short = "First 256 colours loaded."
-                    } );
-                    break;
-                }
+                if ( colourCount >= MaxColours ) break;
 
-                byte low = data[i];
-                byte high = data[i + 1];
-
-                var snes = new SnesColor(low, high);
-                int value = snes.Value;
-
-                // VALID SNES COLOUR?
-                bool isValid =
-                    ((value & 0x8000) == 0) &&             // bit 15 must be 0
-                    ((value & 0x1F) <= 31) &&                // R
-                    (((value >> 5) & 0x1F) <= 31) &&         // G
-                    (((value >> 10) & 0x1F) <= 31);          // B
+                ushort value = (ushort)(data[i] | (data[i + 1] << 8));
+                bool isValid = (value & 0x8000) == 0;
 
                 if ( !isValid )
                 {
-                    // Cluster break → insert ONE placeholder if we were in a cluster
-                    if ( inCluster )
-                    {
-                        colIndex++;
-
-                        if ( colIndex >= ColoursPerRow )
-                        {
-                            colIndex = 0;
-                            row++;
-
-                            if ( row >= TotalRows )
-                            {
-                                result.Warnings.Add( new ColWarning
-                                {
-                                    Long = "More than 16 palette rows detected — extra rows ignored." ,
-                                    Short = "First 16 rows of colours loaded."
-                                } );
-
-                                break;
-                            }
-                        }
-                    }
-
                     inCluster = false;
                     continue;
                 }
 
-                // VALID COLOUR
                 inCluster = true;
-
                 int r8 = (value & 0x1F) << 3;
                 int g8 = ((value >> 5) & 0x1F) << 3;
                 int b8 = ((value >> 10) & 0x1F) << 3;
 
-                col.RawColors[row , colIndex] = snes;
+                col.RawColors[row , colIndex] = new SnesColor( data[i] , data[i + 1] );
                 col.RgbColors[row , colIndex] = Color.FromArgb( 255 , (byte)r8 , (byte)g8 , (byte)b8 );
 
                 colourCount++;
-                colIndex++;
-
-                // Row full?
-                if ( colIndex >= ColoursPerRow )
+                if ( ++colIndex >= ColoursPerRow )
                 {
                     colIndex = 0;
-                    row++;
-
-                    if ( row >= TotalRows )
-                    {
-                        result.Warnings.Add( new ColWarning
-                        {
-                            Long = "More than 16 palette rows detected — extra rows ignored." ,
-                            Short = "First 16 rows of colours loaded."
-                        } );
-
-                        break;
-                    }
+                    if ( ++row >= TotalRows ) break;
                 }
             }
 
-            // Metadata = everything after the last processed byte
-            int processedBytes = colourCount * BytesPerColour;
-            if ( processedBytes < length )
-            {
-                int metaLength = length - processedBytes;
-                col.Metadata = new byte[metaLength];
-                Buffer.BlockCopy( data , processedBytes , col.Metadata , 0 , metaLength );
-            }
+            // Metadata = everything after palette + footer
+            int metaStart = Math.Min(length, PaletteBytes);
+            col.Metadata = data.Skip( metaStart ).ToArray();
 
             if ( colourCount == 0 )
-                result.Warnings.Add( new ColWarning
-                {
-                    Long = "No valid colours found — palette filled with placeholders." ,
-                    Short = "No colours found."
-                } );
+                result.Warnings.Add( new ColWarning { Short = "No colours found." , Long = "No valid colours found — palette filled with placeholders." } );
 
             col.BuildCachedColors();
             return col;
         }
+
 
     }
 }
