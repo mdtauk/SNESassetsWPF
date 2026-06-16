@@ -1,173 +1,230 @@
 ﻿using System;
 using System.Diagnostics;
 using SNESassetsWPF.Models;
-using SNESassetsWPF.Formats;
 
-namespace SNESassetsWPF.Services
+namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// H‑CG‑CAD‑style CGX parser.
-    ///
-    /// CGX structure (editor-side):
-    ///   [0x0000 ...] Raw tile bitplane data (2/4/8bpp)
-    ///   [optional]   Metadata block (0x100 bytes, ASCII-ish, ends with 0x00)
-    ///   [optional]   Prefix table (0x400 bytes, 1 byte per tile, editor-only)
-    ///
-    /// This parser:
-    ///   • detects bit depth (2/4/8 bpp) using size patterns
-    ///   • supports up to 1024 tiles
-    ///   • detects presence of metadata and prefix table
-    ///   • decodes tiles into 8×8 pixel index arrays
-    ///   • applies prefix → PaletteRow for 4bpp when prefix exists
-    ///
-    /// Bit depth can still be overridden later via ReinterpretBitDepth.
+    /// H‑CG‑CAD‑style CGX parser with strict and partial modes.
     /// </summary>
     public class CgxFileParser
     {
-        public CgxFile Parse(byte[] raw)
+        // ============================================================
+        // CONSTANTS (no magic numbers)
+        // ============================================================
+        private const int MaxTiles = 1024;
+
+        private const int BytesPerTile2Bpp = 16;
+        private const int BytesPerTile4Bpp = 32;
+        private const int BytesPerTile8Bpp = 64;
+
+        private const int MetadataSize = 0x100;
+        private const int PrefixTableSize = 0x400;
+
+        // Known full‑sheet sizes (tile data only)
+        private const int FullSheet2BppBytes = MaxTiles * BytesPerTile2Bpp;
+        private const int FullSheet4BppBytes = MaxTiles * BytesPerTile4Bpp;
+        private const int FullSheet8BppBytes = MaxTiles * BytesPerTile8Bpp;
+
+        // ============================================================
+        // WARNING HELPER (dedupe by Short)
+        // ============================================================
+        private static void AddWarning(CgxFileReadResult result , string longText , string shortText)
         {
-            if ( raw == null || raw.Length == 0 )
-                throw new Exception( "Empty CGX data." );
-
-            var cgx = new CgxFile
+            foreach ( var w in result.Warnings )
             {
-                RawFile = raw
-            };
+                if ( w.Short == shortText )
+                    return;
+            }
 
-            // ---------------------------------------------------------
-            // 1. Detect bit depth and layout from file size
-            // ---------------------------------------------------------
-            // We assume H‑CG‑CAD-style full sheets: up to 1024 tiles.
-            // For each candidate bpp, we check if the file size matches:
-            //   tileDataSize = 1024 * bytesPerTile
-            //   extra = raw.Length - tileDataSize
-            //   extra ∈ { 0, 0x100, 0x400, 0x500 }
-            //
-            //  extra = 0      → tile data only
-            //  extra = 0x100  → tile data + metadata
-            //  extra = 0x400  → tile data + prefix
-            //  extra = 0x500  → tile data + metadata + prefix
-            //
-            // If no pattern matches, we fall back to "best guess":
-            //   • choose 4bpp
-            //   • tileCount = floor(raw.Length / bytesPerTile)
-            //   • no metadata/prefix
-            int bitDepth;
-            int bytesPerTile;
-            int tileDataSize;
-            int extraSize;
+            result.Warnings.Add( new CgxFileReadResult.CgxWarning
+            {
+                Long = longText ,
+                Short = shortText
+            } );
+        }
+
+        // ============================================================
+        // CLASSIFY STRUCTURE
+        // ============================================================
+        public static void ClassifyCgxStructure(CgxFileReadResult result)
+        {
+            byte[] data = result.RawFile;
+            int length = data.Length;
+
+            result.RawTileData = Array.Empty<byte>();
+            result.RawPrefixTable = Array.Empty<byte>();
+            result.RawMetadata = Array.Empty<byte>();
+            result.Warnings.Clear();
+            result.Format = CgxFileReadResult.CgxFormatType.Valid;
+
+            if ( !result.Success || data == null || length == 0 )
+            {
+                result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                AddWarning( result ,
+                    "CGX file is empty or unreadable." ,
+                    "Empty or unreadable CGX." );
+                return;
+            }
+
+            // --------------------------------------------------------
+            // 1. Try to detect full‑sheet layout (H‑CG‑CAD style)
+            // --------------------------------------------------------
+            int bitDepth = 0;
+            int bytesPerTile = 0;
+            int tileDataSize = 0;
+            int extraSize = 0;
             bool hasMetadata = false;
             bool hasPrefix = false;
 
-            if ( !TryDetectLayout( raw.Length , out bitDepth , out bytesPerTile , out tileDataSize , out extraSize , out hasMetadata , out hasPrefix ) )
+            if ( !TryDetectFullSheetLayout(
+                    length ,
+                    out bitDepth ,
+                    out bytesPerTile ,
+                    out tileDataSize ,
+                    out extraSize ,
+                    out hasMetadata ,
+                    out hasPrefix ) )
             {
-                // Fallback: assume 4bpp, no metadata/prefix, variable tile count
+                // Fallback: assume 4bpp, no guaranteed metadata/prefix.
                 bitDepth = 4;
-                bytesPerTile = 32;
-                tileDataSize = raw.Length;
+                bytesPerTile = BytesPerTile4Bpp;
+                tileDataSize = length;
                 extraSize = 0;
                 hasMetadata = false;
                 hasPrefix = false;
 
-                Debug.WriteLine( $"[CGX] Unknown size {raw.Length} bytes — assuming 4bpp, no metadata/prefix." );
+                AddWarning( result ,
+                    "CGX size does not match any known full‑sheet pattern. Assuming 4bpp with no metadata or prefix table." ,
+                    "Unknown size, assumed 4bpp." );
+                result.Format = CgxFileReadResult.CgxFormatType.Warn;
             }
 
-            cgx.BitDepth = bitDepth;
-            cgx.BytesPerTile = bytesPerTile;
-
-            // ---------------------------------------------------------
-            // 2. Extract tile data (up to 1024 tiles)
-            // ---------------------------------------------------------
-            int maxTiles = 1024;
-            int maxTileDataSize = bytesPerTile * maxTiles;
-
+            // --------------------------------------------------------
+            // 2. Split regions based on detected layout
+            // --------------------------------------------------------
             // Clamp tileDataSize to available data
-            if ( tileDataSize > raw.Length )
-                tileDataSize = raw.Length;
+            if ( tileDataSize > length )
+                tileDataSize = length;
 
-            // Compute tile count from tileDataSize
-            int tileCount = tileDataSize / bytesPerTile;
-            if ( tileCount > maxTiles )
-                tileCount = maxTiles;
+            int tileCountBytes = tileDataSize;
+            int tileCount = tileCountBytes / bytesPerTile;
+            int tileRemainder = tileCountBytes % bytesPerTile;
 
-            cgx.TileCount = tileCount;
-
-            cgx.RawTileData = new byte[tileCount * bytesPerTile];
-            Array.Copy( raw , 0 , cgx.RawTileData , 0 , cgx.RawTileData.Length );
-
-            // ---------------------------------------------------------
-            // 3. Extract metadata (if present)
-            // ---------------------------------------------------------
-            int offset = tileDataSize;
-            cgx.Metadata = Array.Empty<byte>();
-
-            if ( hasMetadata && extraSize >= 0x100 && raw.Length >= offset + 0x100 )
+            if ( tileCount == 0 )
             {
-                cgx.Metadata = new byte[0x100];
-                Array.Copy( raw , offset , cgx.Metadata , 0 , 0x100 );
-                offset += 0x100;
+                result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                AddWarning( result ,
+                    "CGX file does not contain enough bytes for a single tile at the assumed bit depth." ,
+                    "No complete tiles." );
+                result.RawTileData = Array.Empty<byte>();
+                result.RawMetadata = data;
+                return;
             }
 
-            // ---------------------------------------------------------
-            // 4. Extract prefix table (if present)
-            // ---------------------------------------------------------
-            cgx.TilePrefixTable = Array.Empty<byte>();
-
-            if ( hasPrefix && raw.Length >= offset + 0x400 )
+            if ( tileRemainder != 0 )
             {
-                cgx.TilePrefixTable = new byte[0x400];
-                Array.Copy( raw , offset , cgx.TilePrefixTable , 0 , 0x400 );
-                offset += 0x400;
+                // Truncated tile data
+                result.Format = CgxFileReadResult.CgxFormatType.Warn;
+                AddWarning( result ,
+                    $"CGX tile data is truncated. {tileRemainder} trailing bytes do not form a complete tile and will be ignored." ,
+                    "Truncated tile data." );
+                tileCountBytes = tileCount * bytesPerTile;
             }
 
-            // ---------------------------------------------------------
-            // 5. Decode tiles
-            // ---------------------------------------------------------
-            cgx.Tiles = new CgxTile[cgx.TileCount];
+            result.RawTileData = new byte[tileCountBytes];
+            Array.Copy( data , 0 , result.RawTileData , 0 , tileCountBytes );
 
-            for ( int i = 0 ; i < cgx.TileCount ; i++ )
-            {
-                cgx.Tiles[i] = DecodeTile(
-                    cgx.RawTileData ,
-                    i * cgx.BytesPerTile ,
-                    cgx.BitDepth
-                );
-            }
+            int offset = tileCountBytes;
+            int remaining = length - offset;
 
-            // ---------------------------------------------------------
-            // 6. Apply per‑tile prefix → PaletteRow (4bpp only)
-            // ---------------------------------------------------------
-            // H‑CG‑CAD uses the prefix byte as:
-            //   lower 4 bits = palette row (0–15) for 4bpp
-            // For 2bpp/8bpp, we leave PaletteRow at 0 (renderer can ignore or override).
-            if ( cgx.BitDepth == 4 &&
-                cgx.TilePrefixTable != null &&
-                cgx.TilePrefixTable.Length >= cgx.TileCount )
+            // --------------------------------------------------------
+            // 3. Metadata and prefix table (only trusted for full‑sheet)
+            // --------------------------------------------------------
+            if ( hasMetadata || hasPrefix )
             {
-                for ( int t = 0 ; t < cgx.TileCount ; t++ )
+                // We only trust the extra layout when full‑sheet pattern matched.
+                // extraSize = remaining bytes after tileDataSize.
+                // But tileDataSize may have been clamped; recompute remaining.
+                remaining = length - tileDataSize;
+                offset = tileDataSize;
+
+                // Metadata (up to 0x100)
+                if ( hasMetadata )
                 {
-                    byte prefix = cgx.TilePrefixTable[t];
-                    cgx.Tiles[t].PaletteRow = prefix & 0x0F;
+                    if ( remaining >= MetadataSize )
+                    {
+                        result.RawMetadata = new byte[MetadataSize];
+                        Array.Copy( data , offset , result.RawMetadata , 0 , MetadataSize );
+                        offset += MetadataSize;
+                        remaining -= MetadataSize;
+                    }
+                    else
+                    {
+                        // Incomplete metadata
+                        result.Format = CgxFileReadResult.CgxFormatType.Warn;
+                        AddWarning( result ,
+                            "CGX metadata/footer region is incomplete." ,
+                            "Incomplete metadata." );
+                        result.RawMetadata = new byte[remaining];
+                        Array.Copy( data , offset , result.RawMetadata , 0 , remaining );
+                        remaining = 0;
+                    }
+                }
+
+                // Prefix table (up to 0x400)
+                if ( hasPrefix && remaining > 0 )
+                {
+                    if ( remaining >= PrefixTableSize )
+                    {
+                        result.RawPrefixTable = new byte[PrefixTableSize];
+                        Array.Copy( data , offset , result.RawPrefixTable , 0 , PrefixTableSize );
+                        offset += PrefixTableSize;
+                        remaining -= PrefixTableSize;
+                    }
+                    else
+                    {
+                        result.Format = CgxFileReadResult.CgxFormatType.Warn;
+                        AddWarning( result ,
+                            "CGX prefix table region is incomplete." ,
+                            "Incomplete prefix table." );
+                        result.RawPrefixTable = new byte[remaining];
+                        Array.Copy( data , offset , result.RawPrefixTable , 0 , remaining );
+                        remaining = 0;
+                    }
+                }
+
+                // Any leftover bytes after expected regions
+                if ( remaining > 0 )
+                {
+                    result.Format = CgxFileReadResult.CgxFormatType.Warn;
+                    AddWarning( result ,
+                        "CGX file contains extra data beyond expected tile/metadata/prefix regions." ,
+                        "Extra trailing data." );
+                }
+            }
+            else
+            {
+                // No trusted metadata/prefix layout → treat all remaining as metadata-ish junk.
+                if ( remaining > 0 )
+                {
+                    result.RawMetadata = new byte[remaining];
+                    Array.Copy( data , offset , result.RawMetadata , 0 , remaining );
+
+                    result.Format = CgxFileReadResult.CgxFormatType.Warn;
+                    AddWarning( result ,
+                        "CGX file contains extra data beyond tile region. Treated as metadata/junk." ,
+                        "Extra data after tiles." );
                 }
             }
 
-            // ---------------------------------------------------------
-            // 7. Default sheet layout (H‑CG‑CAD style)
-            // ---------------------------------------------------------
-            // H‑CG‑CAD typically uses 32×32 for full sheets, but for fewer tiles
-            // we still keep 32×32 as a logical grid; the renderer just won't
-            // draw beyond TileCount.
-            cgx.TilesX = 32;
-            cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / 32.0 );
-
-            return cgx;
+            // Store bit depth info in Parsed later; here we just classify.
         }
 
         /// <summary>
-        /// Try to detect bit depth and layout from file size.
-        /// Returns true if a known pattern is matched.
+        /// Try to detect full‑sheet layout (1024 tiles) and extra regions.
         /// </summary>
-        private bool TryDetectLayout(
+        private static bool TryDetectFullSheetLayout(
             int length ,
             out int bitDepth ,
             out int bytesPerTile ,
@@ -188,50 +245,257 @@ namespace SNESassetsWPF.Services
 
             foreach ( int bpp in bpps )
             {
-                int bpt = bpp * 8;          // bytes per tile
-                int fullTileData = bpt * 1024; // full 1024-tile sheet
+                int bpt = bpp switch
+                {
+                    2 => BytesPerTile2Bpp,
+                    4 => BytesPerTile4Bpp,
+                    8 => BytesPerTile8Bpp,
+                    _ => 0
+                };
 
-                if ( length < bpt ) // too small for even one tile
+                if ( bpt == 0 )
                     continue;
 
-                if ( length >= fullTileData )
+                int fullTileData = bpt * MaxTiles;
+
+                if ( length < fullTileData )
+                    continue;
+
+                int extra = length - fullTileData;
+
+                // Known extra sizes: 0, 0x100, 0x400, 0x500
+                if ( extra == 0 || extra == MetadataSize || extra == PrefixTableSize || extra == MetadataSize + PrefixTableSize )
                 {
-                    int extra = length - fullTileData;
+                    bitDepth = bpp;
+                    bytesPerTile = bpt;
+                    tileDataSize = fullTileData;
+                    extraSize = extra;
 
-                    // Known extra sizes: 0, 0x100, 0x400, 0x500
-                    if ( extra == 0 || extra == 0x100 || extra == 0x400 || extra == 0x500 )
-                    {
-                        bitDepth = bpp;
-                        bytesPerTile = bpt;
-                        tileDataSize = fullTileData;
-                        extraSize = extra;
+                    hasMetadata = ( extra == MetadataSize || extra == MetadataSize + PrefixTableSize );
+                    hasPrefix = ( extra == PrefixTableSize || extra == MetadataSize + PrefixTableSize );
 
-                        hasMetadata = ( extra == 0x100 || extra == 0x500 );
-                        hasPrefix = ( extra == 0x400 || extra == 0x500 );
-
-                        return true;
-                    }
+                    return true;
                 }
             }
 
-            // No known pattern matched
             return false;
         }
 
-        // -------------------------------------------------------------
-        // Decode a single tile (8×8 pixels) from SNES bitplane format
-        // -------------------------------------------------------------
-        private CgxTile DecodeTile(byte[] data , int offset , int bpp)
+        // ============================================================
+        // STRICT PARSER (no exceptions, uses classification)
+        // ============================================================
+        public static CgxFile ParseStrict(CgxFileReadResult result)
+        {
+            if ( !result.Success || result.RawTileData == null || result.RawTileData.Length == 0 )
+                return null;
+
+            // In strict mode we only accept:
+            //  - full‑sheet layout detected OR
+            //  - no truncated tiles
+            //  - no incomplete metadata/prefix
+            // But classification already downgraded to Warn when partial.
+            if ( result.Format != CgxFileReadResult.CgxFormatType.Valid )
+                return null;
+
+            // We need to know bit depth. For strict, we trust full‑sheet detection:
+            int bitDepth;
+            int bytesPerTile;
+
+            if ( !TryInferBitDepthFromTileData( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+            {
+                AddWarning( result ,
+                    "Unable to infer CGX bit depth in strict mode." ,
+                    "Unknown bit depth (strict)." );
+                result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                return null;
+            }
+
+            var cgx = new CgxFile
+            {
+                RawFile = result.RawFile,
+                BitDepth = bitDepth,
+                BytesPerTile = bytesPerTile
+            };
+
+            int tileCount = result.RawTileData.Length / bytesPerTile;
+            cgx.TileCount = tileCount;
+            cgx.RawTileData = new byte[result.RawTileData.Length];
+            Array.Copy( result.RawTileData , cgx.RawTileData , result.RawTileData.Length );
+
+            // Metadata / prefix as‑is
+            cgx.Metadata = result.RawMetadata ?? Array.Empty<byte>();
+            cgx.TilePrefixTable = result.RawPrefixTable ?? Array.Empty<byte>();
+
+            // Decode tiles
+            cgx.Tiles = new CgxTile[cgx.TileCount];
+
+            for ( int i = 0 ; i < cgx.TileCount ; i++ )
+            {
+                cgx.Tiles[i] = DecodeTile(
+                    cgx.RawTileData ,
+                    i * cgx.BytesPerTile ,
+                    cgx.BitDepth );
+            }
+
+            // Apply prefix → PaletteRow (4bpp only)
+            if ( cgx.BitDepth == 4 &&
+                cgx.TilePrefixTable != null &&
+                cgx.TilePrefixTable.Length >= cgx.TileCount )
+            {
+                for ( int t = 0 ; t < cgx.TileCount ; t++ )
+                {
+                    byte prefix = cgx.TilePrefixTable[t];
+                    cgx.Tiles[t].PaletteRow = prefix & 0x0F;
+                }
+            }
+
+            // Default sheet layout (H‑CG‑CAD style)
+            cgx.TilesX = 32;
+            cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / 32.0 );
+
+            result.Parsed = cgx;
+            return cgx;
+        }
+
+        // ============================================================
+        // PARTIAL PARSER (best‑effort, no exceptions)
+        // ============================================================
+        public static CgxFile ParsePartial(CgxFileReadResult result)
+        {
+            if ( !result.Success || result.RawTileData == null || result.RawTileData.Length == 0 )
+            {
+                AddWarning( result ,
+                    "CGX file has no usable tile data. Nothing to render." ,
+                    "No tile data." );
+                result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                return null;
+            }
+
+            // Bit depth: try to infer from full‑sheet; otherwise assume 4bpp.
+            int bitDepth;
+            int bytesPerTile;
+
+            if ( !TryInferBitDepthFromTileData( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+            {
+                bitDepth = 4;
+                bytesPerTile = BytesPerTile4Bpp;
+
+                AddWarning( result ,
+                    "Unable to infer CGX bit depth from size. Assuming 4bpp." ,
+                    "Assumed 4bpp." );
+            }
+
+            int tileCount = result.RawTileData.Length / bytesPerTile;
+            if ( tileCount == 0 )
+            {
+                AddWarning( result ,
+                    "CGX tile data is too small for even one tile at the assumed bit depth." ,
+                    "No complete tiles." );
+                result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                return null;
+            }
+
+            var cgx = new CgxFile
+            {
+                RawFile = result.RawFile,
+                BitDepth = bitDepth,
+                BytesPerTile = bytesPerTile,
+                TileCount = tileCount
+            };
+
+            cgx.RawTileData = new byte[tileCount * bytesPerTile];
+            Array.Copy( result.RawTileData , cgx.RawTileData , cgx.RawTileData.Length );
+
+            // Metadata/prefix: keep whatever was classified, but we do NOT rely on them.
+            cgx.Metadata = result.RawMetadata ?? Array.Empty<byte>();
+            cgx.TilePrefixTable = result.RawPrefixTable ?? Array.Empty<byte>();
+
+            cgx.Tiles = new CgxTile[cgx.TileCount];
+
+            for ( int i = 0 ; i < cgx.TileCount ; i++ )
+            {
+                cgx.Tiles[i] = DecodeTile(
+                    cgx.RawTileData ,
+                    i * cgx.BytesPerTile ,
+                    cgx.BitDepth );
+            }
+
+            // Prefix table may be incomplete; only apply where safe.
+            if ( cgx.BitDepth == 4 &&
+                cgx.TilePrefixTable != null &&
+                cgx.TilePrefixTable.Length > 0 )
+            {
+                int usable = Math.Min(cgx.TileCount, cgx.TilePrefixTable.Length);
+                for ( int t = 0 ; t < usable ; t++ )
+                {
+                    byte prefix = cgx.TilePrefixTable[t];
+                    cgx.Tiles[t].PaletteRow = prefix & 0x0F;
+                }
+
+                if ( cgx.TilePrefixTable.Length < cgx.TileCount )
+                {
+                    AddWarning( result ,
+                        "CGX prefix table is shorter than tile count. Some tiles have no prefix information." ,
+                        "Prefix shorter than tiles." );
+                }
+            }
+
+            // Layout: choose a reasonable width (like your viewer default)
+            cgx.TilesX = 32;
+            cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / (double)cgx.TilesX );
+
+            result.Parsed = cgx;
+            return cgx;
+        }
+
+        // ============================================================
+        // Bit‑depth inference helper (from tile data size)
+        // ============================================================
+        private static bool TryInferBitDepthFromTileData(int tileDataBytes , out int bitDepth , out int bytesPerTile)
+        {
+            // Try 8, 4, 2 in that order.
+            if ( tileDataBytes % BytesPerTile8Bpp == 0 )
+            {
+                bitDepth = 8;
+                bytesPerTile = BytesPerTile8Bpp;
+                return true;
+            }
+
+            if ( tileDataBytes % BytesPerTile4Bpp == 0 )
+            {
+                bitDepth = 4;
+                bytesPerTile = BytesPerTile4Bpp;
+                return true;
+            }
+
+            if ( tileDataBytes % BytesPerTile2Bpp == 0 )
+            {
+                bitDepth = 2;
+                bytesPerTile = BytesPerTile2Bpp;
+                return true;
+            }
+
+            bitDepth = 0;
+            bytesPerTile = 0;
+            return false;
+        }
+
+        // ============================================================
+        // Decode a single tile (unchanged logic, but no throws here)
+        // ============================================================
+        private static CgxTile DecodeTile(byte[] data , int offset , int bpp)
         {
             var tile = new CgxTile();
 
             switch ( bpp )
             {
                 case 2:
-                    // 2bpp: 16 bytes per tile
                     for ( int y = 0 ; y < 8 ; y++ )
                     {
                         int rowOffset = offset + (y * 2);
+                        if ( rowOffset + 1 >= data.Length )
+                            break;
+
                         byte p0 = data[rowOffset + 0];
                         byte p1 = data[rowOffset + 1];
 
@@ -252,11 +516,13 @@ namespace SNESassetsWPF.Services
                     break;
 
                 case 4:
-                    // 4bpp: 32 bytes per tile
                     for ( int y = 0 ; y < 8 ; y++ )
                     {
-                        int rowOffset01 = offset + (y * 2);        // planes 0–1
-                        int rowOffset23 = offset + 16 + (y * 2);   // planes 2–3
+                        int rowOffset01 = offset + (y * 2);
+                        int rowOffset23 = offset + 16 + (y * 2);
+
+                        if ( rowOffset23 + 1 >= data.Length )
+                            break;
 
                         byte p0 = data[rowOffset01 + 0];
                         byte p1 = data[rowOffset01 + 1];
@@ -284,13 +550,15 @@ namespace SNESassetsWPF.Services
                     break;
 
                 case 8:
-                    // 8bpp: 64 bytes per tile
                     for ( int y = 0 ; y < 8 ; y++ )
                     {
-                        int rowOffset01 = offset + (y * 2);          // planes 0–1
-                        int rowOffset23 = offset + 16 + (y * 2);     // planes 2–3
-                        int rowOffset45 = offset + 32 + (y * 2);     // planes 4–5
-                        int rowOffset67 = offset + 48 + (y * 2);     // planes 6–7
+                        int rowOffset01 = offset + (y * 2);
+                        int rowOffset23 = offset + 16 + (y * 2);
+                        int rowOffset45 = offset + 32 + (y * 2);
+                        int rowOffset67 = offset + 48 + (y * 2);
+
+                        if ( rowOffset67 + 1 >= data.Length )
+                            break;
 
                         byte p0 = data[rowOffset01 + 0];
                         byte p1 = data[rowOffset01 + 1];
@@ -330,7 +598,8 @@ namespace SNESassetsWPF.Services
                     break;
 
                 default:
-                    throw new Exception( $"Unsupported CGX bit depth: {bpp}" );
+                    // Unsupported bpp → leave tile as zeros.
+                    break;
             }
 
             return tile;
@@ -353,7 +622,6 @@ namespace SNESassetsWPF.Services
                     cgx.BitDepth
                 );
 
-                // Reapply palette row from prefix table (4bpp only)
                 if ( cgx.BitDepth == 4 &&
                     cgx.TilePrefixTable != null &&
                     cgx.TilePrefixTable.Length > i )

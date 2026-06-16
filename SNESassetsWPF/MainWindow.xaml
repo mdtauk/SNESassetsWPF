@@ -277,7 +277,7 @@
 
                 <MenuItem
                     x:Name="menuExportMAPtoPNG"
-                    Command="{Binding ExportMapngCommand}"
+                    Command="{Binding ExportMapPngCommand}"
                     Header="Export MAP to PNG" />
 
             </MenuItem>

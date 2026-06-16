@@ -193,6 +193,38 @@ namespace SNESassetsWPF.ViewModels
                 CgxViewer.CgxFile = value.Asset;
                 ScrViewer.CgxFile = value.Asset;
                 MapPnlViewer.CurrentCgx = value.Asset;
+
+                // Update CGX warnings
+                _cgxWarnings.Clear();
+
+                if ( value.ReadResult is CgxFileReadResult rr && rr.Warnings != null )
+                {
+                    string severity =
+                    rr.Format == CgxFileReadResult.CgxFormatType.Fail ? "Error" :
+                    rr.Format == CgxFileReadResult.CgxFormatType.Warn ? "Warning" :
+                    null;
+
+                    if ( severity != null )
+                    {
+                        _cgxWarnings.Add( new UiMessage
+                        {
+                            Severity = "Info" ,
+                            Text = "CGX"
+                        } );
+
+                        foreach ( var group in rr.Warnings.GroupBy( w => w.Short ) )
+                        {
+                            _cgxWarnings.Add( new UiMessage
+                            {
+                                Severity = severity ,
+                                Text = group.Key
+                            } );
+                        }
+                    }
+                }
+
+                RebuildAllWarnings();
+
             }
         }
 

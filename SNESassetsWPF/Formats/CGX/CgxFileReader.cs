@@ -27,7 +27,6 @@ namespace SNESassetsWPF.Formats
                 return CgxFileReadResult.Fail( ex.Message );
             }
         }
-
     }
 
 }

@@ -92,12 +92,44 @@ namespace SNESassetsWPF.Services
                     return null;
                 }
 
-                var parser = new CgxFileParser();
-                var cgx = parser.Parse(readResult.RawFile);
+                // 1. Classify structure
+                CgxFileParser.ClassifyCgxStructure( readResult );
+
+                if ( readResult.Format == CgxFileReadResult.CgxFormatType.Fail )
+                {
+                    Debug.WriteLine( "CGX format invalid or unsupported." );
+                    return null;
+                }
+
+                // 2. Parse based on classification
+                CgxFile cgx;
+                switch ( readResult.Format )
+                {
+                    case CgxFileReadResult.CgxFormatType.Valid:
+                        cgx = CgxFileParser.ParseStrict( readResult );
+                        break;
+
+                    case CgxFileReadResult.CgxFormatType.Warn:
+                        cgx = CgxFileParser.ParsePartial( readResult );
+                        break;
+
+                    default:
+                        Debug.WriteLine( "CGX format unknown or unsupported." );
+                        return null;
+                }
+
+                if ( cgx == null )
+                {
+                    Debug.WriteLine( "CGX parse returned null." );
+                    return null;
+                }
 
                 CgxVerify.DumpSummary( cgx );
 
-                return new LoadedAsset<CgxFile>( path , cgx );
+                Debug.WriteLine( "CGX LOADER: ReadResult attached = " + ( readResult != null ) );
+
+
+                return new LoadedAsset<CgxFile>( path , cgx , readResult );
             }
             catch ( Exception ex )
             {
@@ -105,6 +137,7 @@ namespace SNESassetsWPF.Services
                 return null;
             }
         }
+
 
         //
         // ─────────────────────────────────────────────────────────────
