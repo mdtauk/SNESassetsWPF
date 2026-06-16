@@ -88,100 +88,6 @@
             </Setter>
         </Style>
 
-        <Style x:Key="clearTabs" TargetType="TabItem">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
-            <Setter Property="FontWeight" Value="Regular" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-            <Setter Property="KeyboardNavigation.IsTabStop" Value="True" />
-            <Setter Property="Focusable" Value="True" />
-            <Setter Property="OverridesDefaultStyle" Value="True" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type TabItem}">
-                        <Grid x:Name="Root">
-                            <Border
-                                x:Name="Border"
-                                MinHeight="32"
-                                Padding="6"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1,1,1,0"
-                                CornerRadius="4,4,0,0">
-                                <ContentPresenter
-                                    x:Name="ContentSite"
-                                    Margin="{TemplateBinding Padding}"
-                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                    ContentSource="Header"
-                                    RecognizesAccessKey="True"
-                                    SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-                            </Border>
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="SelectionStates">
-                                    <VisualState x:Name="Unselected" />
-                                    <VisualState x:Name="Selected" />
-                                </VisualStateGroup>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal" />
-                                    <VisualState x:Name="MouseOver" />
-                                    <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="Border"
-                                                Storyboard.TargetProperty="(Panel.Background).(SolidColorBrush.Opacity)"
-                                                From="0.0"
-                                                To="0.5"
-                                                Duration="0:0:.16" />
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Panel.ZIndex" Value="100" />
-                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource TabViewItemHeaderBackgroundSelected}" />
-                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource TabViewSelectedItemBorderBrush}" />
-                                <Setter Property="Foreground" Value="{DynamicResource TabViewItemForegroundSelected}" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </Trigger>
-
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding Path=TabStripPlacement, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}" Value="Bottom" />
-                                </MultiDataTrigger.Conditions>
-                                <Setter TargetName="Border" Property="BorderThickness" Value="1,0,1,1" />
-                                <Setter TargetName="Border" Property="CornerRadius" Value="0,0,8,8" />
-                            </MultiDataTrigger>
-
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding Path=TabStripPlacement, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}" Value="Left" />
-                                </MultiDataTrigger.Conditions>
-                                <Setter TargetName="Border" Property="BorderThickness" Value="1,1,0,1" />
-                                <Setter TargetName="Border" Property="CornerRadius" Value="8,0,0,8" />
-                            </MultiDataTrigger>
-
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding Path=TabStripPlacement, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}" Value="Right" />
-                                </MultiDataTrigger.Conditions>
-                                <Setter TargetName="Border" Property="BorderThickness" Value="1,1,0,1" />
-                                <Setter TargetName="Border" Property="CornerRadius" Value="0,8,8,0" />
-                            </MultiDataTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
     </Window.Resources>
 
 
@@ -292,7 +198,7 @@
         <!--  Tabs to switch the loaded file list type  -->
         <TabControl Grid.Row="1" Margin="8,0,12,8">
             <!--  TAB ITEM FOR COL FILES  -->
-            <TabItem Header="COL files" Style="{DynamicResource clearTabs}">
+            <TabItem Header="COL files" Style="{StaticResource clearTabs}">
                 <Border
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
@@ -330,7 +236,7 @@
             </TabItem>
 
             <!--  TAB ITEM FOR CGX FILES  -->
-            <TabItem Header="CGX files" Style="{DynamicResource clearTabs}">
+            <TabItem Header="CGX files" Style="{StaticResource clearTabs}">
                 <Border
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
@@ -540,11 +446,12 @@
                 Margin="0"
                 Padding="0"
                 HorizontalAlignment="Stretch"
-                DataContext="{Binding}" />
+                ItemsSource="{Binding AllWarnings}" />
 
             <Button
                 Grid.Row="3"
                 Margin="0,8,0,8"
+                Command="{Binding ShowAuditCommand}"
                 Content="File audit" />
 
         </Grid>
@@ -636,7 +543,7 @@
             Grid.Row="1"
             Grid.Column="2"
             Margin="0,0,16,8">
-            <TabItem Header="SCR files" Style="{DynamicResource clearTabs}">
+            <TabItem Header="SCR files" Style="{StaticResource clearTabs}">
                 <Border
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
@@ -778,7 +685,7 @@
             </TabItem>
 
 
-            <TabItem Header="MAP and PNL files" Style="{DynamicResource clearTabs}">
+            <TabItem Header="MAP and PNL files" Style="{StaticResource clearTabs}">
                 <Border
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"

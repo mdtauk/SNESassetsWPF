@@ -42,6 +42,16 @@ namespace SNESassetsWPF.ViewModels
         private readonly List<UiMessage> _pnlWarnings = new();
         private readonly List<UiMessage> _mapWarnings = new();
 
+        public ObservableCollection<UiMessage> AllLongWarnings { get; }
+            = new ObservableCollection<UiMessage>();
+
+        // Internal buckets for each asset type
+        private readonly List<UiMessage> _colLongWarnings = new();
+        private readonly List<UiMessage> _cgxLongWarnings = new();
+        private readonly List<UiMessage> _scrLongWarnings = new();
+        private readonly List<UiMessage> _pnlLongWarnings = new();
+        private readonly List<UiMessage> _mapLongWarnings = new();
+
 
 
         //
@@ -144,6 +154,7 @@ namespace SNESassetsWPF.ViewModels
                 }
 
                 RebuildAllWarnings();
+                RebuildAllLongWarnings();
 
 
 
@@ -224,6 +235,7 @@ namespace SNESassetsWPF.ViewModels
                 }
 
                 RebuildAllWarnings();
+                RebuildAllLongWarnings();
 
             }
         }
@@ -282,6 +294,7 @@ namespace SNESassetsWPF.ViewModels
                 }
 
                 RebuildAllWarnings();
+                RebuildAllLongWarnings();
 
                 // Update viewer
                 ScrViewer.ScrFile = value.Asset;
@@ -342,6 +355,7 @@ namespace SNESassetsWPF.ViewModels
         public ICommand ChooseFolderCommand { get; }
         public ICommand ShowColHexCommand { get; }
         public ICommand ShowSettingsCommand { get; }
+        public ICommand ShowAuditCommand { get; }
 
         public ICommand LoadColCommand { get; }
         public ICommand LoadCgxCommand { get; }
@@ -366,6 +380,7 @@ namespace SNESassetsWPF.ViewModels
             ChooseFolderCommand = new RelayCommand( ChooseFolder );
             ShowColHexCommand = new RelayCommand( ShowColHex );
             ShowSettingsCommand = new RelayCommand( ShowSettingsWindow );
+            ShowAuditCommand = new RelayCommand( ShowAuditWindow );
 
 
             // Create ALL viewer VMs FIRST
@@ -436,6 +451,58 @@ namespace SNESassetsWPF.ViewModels
         }
 
 
+        private void RebuildAllLongWarnings()
+        {
+            AllLongWarnings.Clear();
+
+            // COL
+            if ( CurrentCol?.ReadResult is ColFileReadResult colRR )
+            {
+                AllLongWarnings.Add( new UiMessage { Severity = "Info" , Text = "COL" } );
+
+                foreach ( var w in colRR.Warnings )
+                    AllLongWarnings.Add( new UiMessage { Severity = "Warning" , Text = w.Long } );
+            }
+
+            // CGX
+            if ( CurrentCgx?.ReadResult is CgxFileReadResult cgxRR )
+            {
+                AllLongWarnings.Add( new UiMessage { Severity = "Info" , Text = "CGX" } );
+
+                foreach ( var w in cgxRR.Warnings )
+                    AllLongWarnings.Add( new UiMessage { Severity = "Warning" , Text = w.Long } );
+            }
+
+            // SCR
+            if ( CurrentScr?.ReadResult is ScrFileReadResult scrRR )
+            {
+                AllLongWarnings.Add( new UiMessage { Severity = "Info" , Text = "SCR" } );
+
+                foreach ( var w in scrRR.Warnings )
+                    AllLongWarnings.Add( new UiMessage { Severity = "Warning" , Text = w.Long } );
+            }
+
+            // PNL
+            //if ( CurrentPnl?.ReadResult is PnlFileReadResult pnlRR )
+            //{
+            //    AllLongWarnings.Add( new UiMessage { Severity = "Info" , Text = "PNL" } );
+
+            //    foreach ( var w in pnlRR.Warnings )
+            //        AllLongWarnings.Add( new UiMessage { Severity = "Warning" , Text = w.Long } );
+            //}
+
+            // MAP
+            //if ( CurrentMap?.ReadResult is MapFileReadResult mapRR )
+            //{
+            //    AllLongWarnings.Add( new UiMessage { Severity = "Info" , Text = "MAP" } );
+
+            //    foreach ( var w in mapRR.Warnings )
+            //        AllLongWarnings.Add( new UiMessage { Severity = "Warning" , Text = w.Long } );
+            //}
+        }
+
+
+
 
 
 
@@ -473,6 +540,16 @@ namespace SNESassetsWPF.ViewModels
 
             // Show modal window
             var win = new SettingsWindow( Palette );
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+
+
+
+        private void ShowAuditWindow()
+        {
+            var win = new AuditWindow(this);
             win.Owner = Application.Current.MainWindow;
             win.ShowDialog();
         }

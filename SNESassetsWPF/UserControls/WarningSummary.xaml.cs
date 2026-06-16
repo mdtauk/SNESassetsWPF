@@ -1,4 +1,6 @@
-﻿using System;
+﻿using SNESassetsWPF.Models;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Windows;
@@ -11,8 +13,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-using SNESassetsWPF.Models;
-
 namespace SNESassetsWPF.UserControls
 {
     /// <summary>
@@ -24,6 +24,30 @@ namespace SNESassetsWPF.UserControls
         {
             InitializeComponent();
         }
+
+
+
+
+        public IEnumerable ItemsSource
+        {
+            get => (IEnumerable)GetValue( ItemsSourceProperty );
+            set => SetValue( ItemsSourceProperty , value );
+        }
+
+        public static readonly DependencyProperty ItemsSourceProperty =
+            DependencyProperty.Register(
+                nameof(ItemsSource),
+                typeof(IEnumerable),
+                typeof(WarningSummary),
+                new PropertyMetadata(null, OnItemsSourceChanged));
+
+        private static void OnItemsSourceChanged(
+            DependencyObject d , DependencyPropertyChangedEventArgs e)
+        {
+            var control = (WarningSummary)d;
+            control.itmctlWarningList.ItemsSource = (IEnumerable)e.NewValue;
+        }
+
 
 
 

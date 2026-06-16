@@ -1,0 +1,44 @@
+﻿<Window
+    x:Class="SNESassetsWPF.AuditWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:SNESassetsWPF"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:uc="clr-namespace:SNESassetsWPF.UserControls"
+    Title="File audit"
+    Width="600"
+    Height="400"
+    mc:Ignorable="d">
+
+    <Grid Margin="16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            Grid.Row="0"
+            Margin="0,0,0,16"
+            Style="{DynamicResource SubtitleTextBlockStyle}"
+            Text="File audit errors" />
+
+        <Border
+            Grid.Row="1"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Background="{DynamicResource LayerFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <uc:WarningSummary
+                Grid.Row="2"
+                Margin="8"
+                Padding="0"
+                HorizontalAlignment="Stretch"
+                DataContext="{Binding MainVM}"
+                ItemsSource="{Binding AllLongWarnings}" />
+        </Border>
+    </Grid>
+
+</Window>

@@ -35,8 +35,7 @@
                 HorizontalContentAlignment="Left"
                 d:ItemsSource="{StaticResource DesignWarnings}"
                 Focusable="False"
-                IsHitTestVisible="False"
-                ItemsSource="{Binding AllWarnings}">
+                IsHitTestVisible="False">
 
                 <ItemsControl.ItemContainerStyle>
                     <Style TargetType="ContentPresenter">
