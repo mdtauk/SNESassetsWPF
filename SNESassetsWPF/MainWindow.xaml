@@ -103,7 +103,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="196" />
             <!--  Tabbed File Tree Column  -->
-            <ColumnDefinition Width="272" />
+            <ColumnDefinition Width="296" />
             <!--  Palette Column  -->
             <ColumnDefinition Width="*" />
             <ColumnDefinition
@@ -435,15 +435,15 @@
             <Border
                 Grid.Row="1"
                 Height="1"
-                Margin="1,0,2,0"
+                Margin="1,0,8,0"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Bottom"
-                Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+                Background="{DynamicResource DividerStrokeColorDefaultBrush}" Padding="0,0,8,0" />
 
             <!--  Warning messages user control  -->
             <uc:WarningSummary
                 Grid.Row="2"
-                Margin="0"
+                Margin="0,0,8,0"
                 Padding="0"
                 HorizontalAlignment="Stretch"
                 ItemsSource="{Binding AllWarnings}" />

@@ -5,7 +5,7 @@ using SNESassetsWPF.Models;
 namespace SNESassetsWPF.Formats
 {
     /// <summary>
-    /// H‑CG‑CAD‑style CGX parser with strict and partial modes.
+    /// S‑CG‑CAD‑style CGX parser with strict and partial modes.
     /// </summary>
     public class CgxFileParser
     {
@@ -68,7 +68,7 @@ namespace SNESassetsWPF.Formats
             }
 
             // --------------------------------------------------------
-            // 1. Try to detect full‑sheet layout (H‑CG‑CAD style)
+            // 1. Try to detect full‑sheet layout (S‑CG‑CAD style)
             // --------------------------------------------------------
             int bitDepth = 0;
             int bytesPerTile = 0;
@@ -103,7 +103,6 @@ namespace SNESassetsWPF.Formats
             // --------------------------------------------------------
             // 2. Split regions based on detected layout
             // --------------------------------------------------------
-            // Clamp tileDataSize to available data
             if ( tileDataSize > length )
                 tileDataSize = length;
 
@@ -124,7 +123,6 @@ namespace SNESassetsWPF.Formats
 
             if ( tileRemainder != 0 )
             {
-                // Truncated tile data
                 result.Format = CgxFileReadResult.CgxFormatType.Warn;
                 AddWarning( result ,
                     $"CGX tile data is truncated. {tileRemainder} trailing bytes do not form a complete tile and will be ignored." ,
@@ -143,13 +141,9 @@ namespace SNESassetsWPF.Formats
             // --------------------------------------------------------
             if ( hasMetadata || hasPrefix )
             {
-                // We only trust the extra layout when full‑sheet pattern matched.
-                // extraSize = remaining bytes after tileDataSize.
-                // But tileDataSize may have been clamped; recompute remaining.
                 remaining = length - tileDataSize;
                 offset = tileDataSize;
 
-                // Metadata (up to 0x100)
                 if ( hasMetadata )
                 {
                     if ( remaining >= MetadataSize )
@@ -161,7 +155,6 @@ namespace SNESassetsWPF.Formats
                     }
                     else
                     {
-                        // Incomplete metadata
                         result.Format = CgxFileReadResult.CgxFormatType.Warn;
                         AddWarning( result ,
                             "CGX metadata/footer region is incomplete." ,
@@ -172,7 +165,6 @@ namespace SNESassetsWPF.Formats
                     }
                 }
 
-                // Prefix table (up to 0x400)
                 if ( hasPrefix && remaining > 0 )
                 {
                     if ( remaining >= PrefixTableSize )
@@ -194,7 +186,6 @@ namespace SNESassetsWPF.Formats
                     }
                 }
 
-                // Any leftover bytes after expected regions
                 if ( remaining > 0 )
                 {
                     result.Format = CgxFileReadResult.CgxFormatType.Warn;
@@ -205,7 +196,6 @@ namespace SNESassetsWPF.Formats
             }
             else
             {
-                // No trusted metadata/prefix layout → treat all remaining as metadata-ish junk.
                 if ( remaining > 0 )
                 {
                     result.RawMetadata = new byte[remaining];
@@ -217,12 +207,11 @@ namespace SNESassetsWPF.Formats
                         "Extra data after tiles." );
                 }
             }
-
-            // Store bit depth info in Parsed later; here we just classify.
         }
 
         /// <summary>
         /// Try to detect full‑sheet layout (1024 tiles) and extra regions.
+        /// Strict, size‑based, no metadata read here.
         /// </summary>
         private static bool TryDetectFullSheetLayout(
             int length ,
@@ -240,8 +229,8 @@ namespace SNESassetsWPF.Formats
             hasMetadata = false;
             hasPrefix = false;
 
-            // Candidate bit depths (try higher first)
-            int[] bpps = { 8, 4, 2 };
+            // Order: 4 → 2 → 8 (8bpp least common)
+            int[] bpps = { 4, 2, 8 };
 
             foreach ( int bpp in bpps )
             {
@@ -263,7 +252,6 @@ namespace SNESassetsWPF.Formats
 
                 int extra = length - fullTileData;
 
-                // Known extra sizes: 0, 0x100, 0x400, 0x500
                 if ( extra == 0 || extra == MetadataSize || extra == PrefixTableSize || extra == MetadataSize + PrefixTableSize )
                 {
                     bitDepth = bpp;
@@ -289,25 +277,41 @@ namespace SNESassetsWPF.Formats
             if ( !result.Success || result.RawTileData == null || result.RawTileData.Length == 0 )
                 return null;
 
-            // In strict mode we only accept:
-            //  - full‑sheet layout detected OR
-            //  - no truncated tiles
-            //  - no incomplete metadata/prefix
-            // But classification already downgraded to Warn when partial.
             if ( result.Format != CgxFileReadResult.CgxFormatType.Valid )
                 return null;
 
-            // We need to know bit depth. For strict, we trust full‑sheet detection:
             int bitDepth;
             int bytesPerTile;
 
-            if ( !TryInferBitDepthFromTileData( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+            // 1. Try metadata BPP first (S‑CG‑CAD footer, offset 0x02)
+            if ( result.RawMetadata != null && result.RawMetadata.Length >= 3 )
             {
-                AddWarning( result ,
-                    "Unable to infer CGX bit depth in strict mode." ,
-                    "Unknown bit depth (strict)." );
-                result.Format = CgxFileReadResult.CgxFormatType.Fail;
-                return null;
+                byte b = result.RawMetadata[2];
+
+                if ( b == 2 || b == 4 || b == 8 )
+                {
+                    bitDepth = b;
+                    bytesPerTile = b * 8;
+                }
+                else if ( !TryInferBitDepthStrict( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+                {
+                    AddWarning( result ,
+                        "Unable to determine CGX bit depth in strict mode from metadata or full‑sheet size." ,
+                        "Unknown bit depth (strict)." );
+                    result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                    return null;
+                }
+            }
+            else
+            {
+                if ( !TryInferBitDepthStrict( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+                {
+                    AddWarning( result ,
+                        "Unable to determine CGX bit depth in strict mode from full‑sheet size." ,
+                        "Unknown bit depth (strict)." );
+                    result.Format = CgxFileReadResult.CgxFormatType.Fail;
+                    return null;
+                }
             }
 
             var cgx = new CgxFile
@@ -322,11 +326,9 @@ namespace SNESassetsWPF.Formats
             cgx.RawTileData = new byte[result.RawTileData.Length];
             Array.Copy( result.RawTileData , cgx.RawTileData , result.RawTileData.Length );
 
-            // Metadata / prefix as‑is
             cgx.Metadata = result.RawMetadata ?? Array.Empty<byte>();
             cgx.TilePrefixTable = result.RawPrefixTable ?? Array.Empty<byte>();
 
-            // Decode tiles
             cgx.Tiles = new CgxTile[cgx.TileCount];
 
             for ( int i = 0 ; i < cgx.TileCount ; i++ )
@@ -337,7 +339,6 @@ namespace SNESassetsWPF.Formats
                     cgx.BitDepth );
             }
 
-            // Apply prefix → PaletteRow (4bpp only)
             if ( cgx.BitDepth == 4 &&
                 cgx.TilePrefixTable != null &&
                 cgx.TilePrefixTable.Length >= cgx.TileCount )
@@ -349,7 +350,6 @@ namespace SNESassetsWPF.Formats
                 }
             }
 
-            // Default sheet layout (H‑CG‑CAD style)
             cgx.TilesX = 32;
             cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / 32.0 );
 
@@ -371,18 +371,40 @@ namespace SNESassetsWPF.Formats
                 return null;
             }
 
-            // Bit depth: try to infer from full‑sheet; otherwise assume 4bpp.
             int bitDepth;
             int bytesPerTile;
 
-            if ( !TryInferBitDepthFromTileData( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+            // Try metadata BPP first
+            if ( result.RawMetadata != null && result.RawMetadata.Length >= 3 )
             {
-                bitDepth = 4;
-                bytesPerTile = BytesPerTile4Bpp;
+                byte b = result.RawMetadata[2];
 
-                AddWarning( result ,
-                    "Unable to infer CGX bit depth from size. Assuming 4bpp." ,
-                    "Assumed 4bpp." );
+                if ( b == 2 || b == 4 || b == 8 )
+                {
+                    bitDepth = b;
+                    bytesPerTile = b * 8;
+                }
+                else if ( !TryInferBitDepthFromTileData( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+                {
+                    bitDepth = 4;
+                    bytesPerTile = BytesPerTile4Bpp;
+
+                    AddWarning( result ,
+                        "Unable to infer CGX bit depth from metadata or size. Assuming 4bpp." ,
+                        "Assumed 4bpp." );
+                }
+            }
+            else
+            {
+                if ( !TryInferBitDepthFromTileData( result.RawTileData.Length , out bitDepth , out bytesPerTile ) )
+                {
+                    bitDepth = 4;
+                    bytesPerTile = BytesPerTile4Bpp;
+
+                    AddWarning( result ,
+                        "Unable to infer CGX bit depth from size. Assuming 4bpp." ,
+                        "Assumed 4bpp." );
+                }
             }
 
             int tileCount = result.RawTileData.Length / bytesPerTile;
@@ -406,7 +428,6 @@ namespace SNESassetsWPF.Formats
             cgx.RawTileData = new byte[tileCount * bytesPerTile];
             Array.Copy( result.RawTileData , cgx.RawTileData , cgx.RawTileData.Length );
 
-            // Metadata/prefix: keep whatever was classified, but we do NOT rely on them.
             cgx.Metadata = result.RawMetadata ?? Array.Empty<byte>();
             cgx.TilePrefixTable = result.RawPrefixTable ?? Array.Empty<byte>();
 
@@ -420,7 +441,6 @@ namespace SNESassetsWPF.Formats
                     cgx.BitDepth );
             }
 
-            // Prefix table may be incomplete; only apply where safe.
             if ( cgx.BitDepth == 4 &&
                 cgx.TilePrefixTable != null &&
                 cgx.TilePrefixTable.Length > 0 )
@@ -440,7 +460,6 @@ namespace SNESassetsWPF.Formats
                 }
             }
 
-            // Layout: choose a reasonable width (like your viewer default)
             cgx.TilesX = 32;
             cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / (double)cgx.TilesX );
 
@@ -449,18 +468,42 @@ namespace SNESassetsWPF.Formats
         }
 
         // ============================================================
-        // Bit‑depth inference helper (from tile data size)
+        // STRICT bit‑depth inference (full‑sheet only, 4 → 2 → 8)
         // ============================================================
-        private static bool TryInferBitDepthFromTileData(int tileDataBytes , out int bitDepth , out int bytesPerTile)
+        private static bool TryInferBitDepthStrict(int tileDataBytes , out int bitDepth , out int bytesPerTile)
         {
-            // Try 8, 4, 2 in that order.
-            if ( tileDataBytes % BytesPerTile8Bpp == 0 )
+            if ( tileDataBytes == FullSheet4BppBytes )
+            {
+                bitDepth = 4;
+                bytesPerTile = BytesPerTile4Bpp;
+                return true;
+            }
+
+            if ( tileDataBytes == FullSheet2BppBytes )
+            {
+                bitDepth = 2;
+                bytesPerTile = BytesPerTile2Bpp;
+                return true;
+            }
+
+            if ( tileDataBytes == FullSheet8BppBytes )
             {
                 bitDepth = 8;
                 bytesPerTile = BytesPerTile8Bpp;
                 return true;
             }
 
+            bitDepth = 0;
+            bytesPerTile = 0;
+            return false;
+        }
+
+        // ============================================================
+        // Bit‑depth inference helper (partial, best‑effort)
+        // ============================================================
+        private static bool TryInferBitDepthFromTileData(int tileDataBytes , out int bitDepth , out int bytesPerTile)
+        {
+            // Order: 4 → 2 → 8 (most common first)
             if ( tileDataBytes % BytesPerTile4Bpp == 0 )
             {
                 bitDepth = 4;
@@ -472,6 +515,13 @@ namespace SNESassetsWPF.Formats
             {
                 bitDepth = 2;
                 bytesPerTile = BytesPerTile2Bpp;
+                return true;
+            }
+
+            if ( tileDataBytes % BytesPerTile8Bpp == 0 )
+            {
+                bitDepth = 8;
+                bytesPerTile = BytesPerTile8Bpp;
                 return true;
             }
 
@@ -598,7 +648,6 @@ namespace SNESassetsWPF.Formats
                     break;
 
                 default:
-                    // Unsupported bpp → leave tile as zeros.
                     break;
             }
 
@@ -607,20 +656,29 @@ namespace SNESassetsWPF.Formats
 
         /// <summary>
         /// Reinterprets the loaded bytes when the bit depth is changed.
-        /// Keeps tile count and prefix table; only re-decodes pixels and reapplies PaletteRow.
+        /// Keeps raw tile data and prefix table; recomputes tile count and pixels.
         /// </summary>
         public void ReinterpretBitDepth(CgxFile cgx , int newBpp)
         {
             cgx.BitDepth = newBpp;
             cgx.BytesPerTile = newBpp * 8;
 
+            int newTileCount = cgx.RawTileData.Length / cgx.BytesPerTile;
+            cgx.TileCount = newTileCount;
+
+            cgx.Tiles = new CgxTile[cgx.TileCount];
+
             for ( int i = 0 ; i < cgx.TileCount ; i++ )
             {
+                int offset = i * cgx.BytesPerTile;
+
+                if ( offset + cgx.BytesPerTile > cgx.RawTileData.Length )
+                    break;
+
                 var tile = DecodeTile(
                     cgx.RawTileData,
-                    i * cgx.BytesPerTile,
-                    cgx.BitDepth
-                );
+                    offset,
+                    cgx.BitDepth);
 
                 if ( cgx.BitDepth == 4 &&
                     cgx.TilePrefixTable != null &&
@@ -632,6 +690,9 @@ namespace SNESassetsWPF.Formats
 
                 cgx.Tiles[i] = tile;
             }
+
+            cgx.TilesX = 32;
+            cgx.TilesY = (int)Math.Ceiling( cgx.TileCount / 32.0 );
         }
     }
 }
